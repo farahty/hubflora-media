@@ -46,25 +46,31 @@ func GenerateFileFolderName(originalFilename string) string {
 	return name
 }
 
-// GenerateTimestampedFolderName creates a folder name with a timestamp suffix.
-// Only used when uniqueness per-upload is needed (e.g. chunked uploads).
+// GenerateTimestampedFolderName creates a folder name with a timestamp suffix
+// to prevent collisions when the same filename is uploaded multiple times.
+//
+//	"profile-image.jpg" → "profile-image-1708967531234"
 func GenerateTimestampedFolderName(originalFilename string) string {
 	base := GenerateFileFolderName(originalFilename)
 	ts := time.Now().UnixMilli()
 	return fmt.Sprintf("%s-%d", base, ts)
 }
 
-// GenerateFileFolderPath builds the folder path: {orgSlug}/{folderName}
+// GenerateFileFolderPath builds the folder path with a timestamp for uniqueness:
+//
+//	{orgSlug}/{folderName-timestamp}
+//
+// Example: travel-agency/profile-image-1708967531234
 func GenerateFileFolderPath(orgSlug, originalFilename string) string {
-	folderName := GenerateFileFolderName(originalFilename)
+	folderName := GenerateTimestampedFolderName(originalFilename)
 	return fmt.Sprintf("%s/%s", orgSlug, folderName)
 }
 
 // GenerateObjectKey builds the full S3 object key:
 //
-//	{orgSlug}/{folderName}/{variant}.{ext}
+//	{orgSlug}/{folderName-timestamp}/{variant}.{ext}
 //
-// Example: travel-agency/profile-image/original.jpg
+// Example: travel-agency/profile-image-1708967531234/original.jpg
 func GenerateObjectKey(orgSlug, originalFilename, variantName, fileExtension string) string {
 	folderPath := GenerateFileFolderPath(orgSlug, originalFilename)
 	ext := strings.TrimPrefix(fileExtension, ".")
