@@ -1,0 +1,158 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+	"github.com/hibiken/asynq"
+
+	"github.com/farahty/hubflora-media/internal/config"
+	"github.com/farahty/hubflora-media/internal/handler"
+	"github.com/farahty/hubflora-media/internal/middleware"
+	"github.com/farahty/hubflora-media/internal/processing"
+	"github.com/farahty/hubflora-media/internal/queue"
+	"github.com/farahty/hubflora-media/internal/storage"
+)
+
+func main() {
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
+	}
+
+	// Initialize S3 client
+	s3Client, err := storage.NewS3Client(cfg)
+	if err != nil {
+		slog.Error("failed to create S3 client", "error", err)
+		os.Exit(1)
+	}
+
+	// Ensure default bucket exists
+	ctx := context.Background()
+	if err := s3Client.EnsureBucket(ctx); err != nil {
+		slog.Warn("failed to ensure bucket", "error", err)
+	}
+
+	// Initialize image processor
+	proc := processing.NewProcessor()
+
+	// Initialize asynq client (for enqueuing tasks)
+	redisOpt, err := queue.ParseRedisURL(cfg.RedisURL)
+	var asynqClient *asynq.Client
+	if err != nil {
+		slog.Warn("redis not configured, async processing disabled", "error", err)
+	} else {
+		asynqClient = asynq.NewClient(redisOpt)
+		defer asynqClient.Close()
+	}
+
+	// Start asynq worker server (for consuming tasks)
+	var asynqServer *asynq.Server
+	if err == nil {
+		asynqServer = asynq.NewServer(redisOpt, asynq.Config{
+			Concurrency: 5,
+			Queues:      map[string]int{"default": 1},
+		})
+		mux := asynq.NewServeMux()
+		mux.Handle(queue.TypeVariantGenerate, queue.NewVariantHandler(s3Client, proc))
+		go func() {
+			if err := asynqServer.Start(mux); err != nil {
+				slog.Error("asynq server failed", "error", err)
+			}
+		}()
+	}
+
+	// Build router
+	r := chi.NewRouter()
+
+	// Global middleware
+	r.Use(chimw.RequestID)
+	r.Use(chimw.RealIP)
+	r.Use(chimw.Logger)
+	r.Use(chimw.Recoverer)
+	r.Use(chimw.Timeout(60 * time.Second))
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   cfg.AllowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Media-API-Key"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
+
+	// Health check (no auth)
+	r.Get("/healthz", handler.Health())
+
+	// API routes (with auth)
+	r.Route("/api/v1/media", func(r chi.Router) {
+		r.Use(middleware.APIKeyAuth(cfg.APIKey))
+
+		// Upload
+		uploadLimiter := middleware.NewRateLimiter(30, time.Minute)
+		r.With(uploadLimiter.Middleware).Post("/upload", handler.Upload(cfg, s3Client, proc, asynqClient))
+		r.Post("/upload/presigned", handler.PresignedUpload(cfg, s3Client))
+
+		// Crop
+		r.Post("/crop", handler.Crop(cfg, s3Client, proc))
+
+		// Delete
+		r.Delete("/", handler.Delete(cfg, s3Client))
+
+		// Presign download
+		r.Get("/presign", handler.Presign(cfg, s3Client))
+
+		// Download file
+		r.Get("/download/{bucket}/*", handler.Download(cfg, s3Client))
+
+		// Variant redirect
+		r.Get("/variant/{bucket}/{variantName}/*", handler.VariantRedirect(cfg, s3Client))
+	})
+
+	// Start HTTP server
+	addr := fmt.Sprintf(":%d", cfg.Port)
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      r,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	// Graceful shutdown
+	go func() {
+		slog.Info("starting hubflora-media server", "addr", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	slog.Info("shutting down server...")
+
+	if asynqServer != nil {
+		asynqServer.Shutdown()
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server shutdown failed", "error", err)
+	}
+
+	slog.Info("server stopped")
+}

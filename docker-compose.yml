@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  hubflora-media:
+    build: .
+    ports:
+      - "8090:8090"
+    environment:
+      - PORT=8090
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_USE_SSL=false
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_DEFAULT_BUCKET=${MINIO_DEFAULT_BUCKET:-media}
+      - MINIO_CDN_DOMAIN=${MINIO_CDN_DOMAIN:-}
+      - MINIO_USE_CDN=${MINIO_USE_CDN:-false}
+      - REDIS_URL=redis://redis:6379
+      - API_KEY=${MEDIA_SERVICE_API_KEY:-changeme}
+      - ALLOWED_CORS_ORIGINS=${ALLOWED_CORS_ORIGINS:-*}
+      - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE:-52428800}
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  minio-data:
+  redis-data:
