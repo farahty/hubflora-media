@@ -69,7 +69,7 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			ext = storage.FileExtensionFromMimeType(mimeType)
 		}
 
-		folderName := storage.GenerateTimestampedFolderName(originalFilename)
+		folderName := storage.GenerateFileFolderName(originalFilename)
 		objectKey := fmt.Sprintf("%s/%s/original.%s", orgSlug, folderName, ext)
 		folderPath := storage.ExtractFolderPath(objectKey)
 
@@ -178,7 +178,7 @@ func PresignedUpload(cfg *config.Config, s3 *storage.S3Client) http.HandlerFunc 
 			ext = storage.FileExtensionFromMimeType(req.MimeType)
 		}
 
-		folderName := storage.GenerateTimestampedFolderName(req.Filename)
+		folderName := storage.GenerateFileFolderName(req.Filename)
 		objectKey := fmt.Sprintf("%s/%s/original.%s", req.OrgSlug, folderName, ext)
 
 		bucket := cfg.MinioDefaultBucket
