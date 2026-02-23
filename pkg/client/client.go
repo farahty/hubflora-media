@@ -13,6 +13,16 @@ import (
 	"github.com/farahty/hubflora-media/internal/model"
 )
 
+// JobStatusResponse represents the status of an async job.
+type JobStatusResponse struct {
+	JobID        string `json:"jobId"`
+	State        string `json:"state"`
+	Progress     int    `json:"progress"`
+	ProcessedOn  int64  `json:"processedOn,omitempty"`
+	FinishedOn   int64  `json:"finishedOn,omitempty"`
+	FailedReason string `json:"failedReason,omitempty"`
+}
+
 // Client is a Go SDK for the hubflora-media service.
 type Client struct {
 	baseURL    string
@@ -101,15 +111,17 @@ func (c *Client) Delete(objectKey, bucketName string) (*model.DeleteResponse, er
 	return &result, nil
 }
 
-// Crop crops an image.
-func (c *Client) Crop(objectKey, bucketName string, x, y, width, height int) (*model.CropResponse, error) {
+// Crop crops an image, replaces the original, and optionally regenerates variants.
+func (c *Client) Crop(objectKey, bucketName string, x, y, width, height int, regenerateVariants, async bool) (*model.CropResponse, error) {
 	payload, _ := json.Marshal(map[string]any{
-		"objectKey":  objectKey,
-		"bucketName": bucketName,
-		"x":          x,
-		"y":          y,
-		"width":      width,
-		"height":     height,
+		"objectKey":          objectKey,
+		"bucketName":         bucketName,
+		"x":                  x,
+		"y":                  y,
+		"width":              width,
+		"height":             height,
+		"regenerateVariants": regenerateVariants,
+		"async":              async,
 	})
 
 	req, err := http.NewRequest("POST", c.baseURL+"/api/v1/media/crop", bytes.NewReader(payload))
@@ -188,6 +200,54 @@ func (c *Client) GetPresignedUploadURL(orgSlug, filename, mimeType string) (*mod
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	return &result, nil
+}
+
+// JobStatus checks the status of an async job.
+func (c *Client) JobStatus(jobID string) (*JobStatusResponse, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/media/job/%s", c.baseURL, jobID), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Media-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("job status request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result JobStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &result, nil
+}
+
+// RegenerateVariants triggers async variant regeneration for an existing file.
+func (c *Client) RegenerateVariants(objectKey, bucketName string) (string, error) {
+	payload, _ := json.Marshal(map[string]string{
+		"objectKey":  objectKey,
+		"bucketName": bucketName,
+	})
+
+	req, err := http.NewRequest("POST", c.baseURL+"/api/v1/media/variants", bytes.NewReader(payload))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Media-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("variant regen request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+	return result["jobId"], nil
 }
 
 // DownloadFile downloads a file from the media service.

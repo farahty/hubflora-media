@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -21,7 +20,7 @@ type DeleteRequest struct {
 func Delete(cfg *config.Config, s3 *storage.S3Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req DeleteRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(r, &req); err != nil {
 			writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "invalid JSON body"})
 			return
 		}

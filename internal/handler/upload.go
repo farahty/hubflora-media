@@ -2,8 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -86,7 +84,7 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 
 		mediaFile := &model.MediaFile{
 			ID:               uuid.New().String(),
-			Filename:         folderName,
+			Filename:         storage.GenerateFileFolderName(originalFilename),
 			OriginalFilename: originalFilename,
 			MimeType:         mimeType,
 			FileSize:         int64(len(data)),
@@ -100,10 +98,10 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 		if processing.IsImageMimeType(mimeType) {
 			meta, err := proc.GetMetadata(data)
 			if err == nil {
-				w := meta.Width
-				h := meta.Height
-				mediaFile.Width = &w
-				mediaFile.Height = &h
+				imgW := meta.Width
+				imgH := meta.Height
+				mediaFile.Width = &imgW
+				mediaFile.Height = &imgH
 				mediaFile.Metadata = map[string]any{
 					"format":      meta.Format,
 					"space":       meta.Space,
@@ -116,8 +114,8 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 		// Generate variants
 		if generateVariants && processing.IsImageMimeType(mimeType) {
 			if async && asynqClient != nil {
-				// Queue async variant generation
-				task, err := queue.NewVariantTask(mediaFile.ID, bucket, folderPath, data)
+				// Queue async variant generation — stores S3 reference, not file bytes
+				task, err := queue.NewVariantTask(mediaFile.ID, bucket, folderPath, objectKey)
 				if err == nil {
 					info, err := asynqClient.Enqueue(task, asynq.MaxRetry(3), asynq.Timeout(5*time.Minute))
 					if err != nil {
@@ -134,19 +132,14 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			}
 
 			// Sync variant generation
-			variants, err := generateAllVariants(r.Context(), s3, proc, data, bucket, folderPath)
-			if err != nil {
-				slog.Warn("variant generation failed", "error", err)
-			} else {
-				mediaFile.Variants = variants
-				if len(variants) > 0 {
-					// Set thumbnail URL
-					for _, v := range variants {
-						if v.Name == "thumbnail" {
-							thumbURL := v.URL
-							mediaFile.ThumbnailURL = &thumbURL
-							break
-						}
+			variants := queue.ProcessVariants(r.Context(), s3, proc, data, bucket, folderPath)
+			mediaFile.Variants = variants
+			if len(variants) > 0 {
+				for _, v := range variants {
+					if v.Name == "thumbnail" {
+						thumbURL := v.URL
+						mediaFile.ThumbnailURL = &thumbURL
+						break
 					}
 				}
 			}
@@ -163,7 +156,7 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 func PresignedUpload(cfg *config.Config, s3 *storage.S3Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req model.PresignedUploadRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(r, &req); err != nil {
 			writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "invalid JSON body"})
 			return
 		}
@@ -195,35 +188,4 @@ func PresignedUpload(cfg *config.Config, s3 *storage.S3Client) http.HandlerFunc 
 			ObjectKey: objectKey,
 		})
 	}
-}
-
-func generateAllVariants(ctx context.Context, s3 *storage.S3Client, proc *processing.Processor, original []byte, bucket, folderPath string) ([]model.MediaVariant, error) {
-	var variants []model.MediaVariant
-
-	for _, variantDef := range processing.DefaultVariants {
-		result, err := proc.ProcessImage(original, variantDef)
-		if err != nil {
-			slog.Warn("variant processing failed", "variant", variantDef.Name, "error", err)
-			continue
-		}
-
-		variantKey := storage.GenerateVariantKey(folderPath, variantDef.Name, result.Format.String())
-
-		if err := s3.Upload(ctx, bucket, variantKey, bytes.NewReader(result.Data), int64(len(result.Data)), result.MimeType); err != nil {
-			slog.Warn("variant upload failed", "variant", variantDef.Name, "error", err)
-			continue
-		}
-
-		variants = append(variants, model.MediaVariant{
-			Name:      variantDef.Name,
-			Width:     result.Width,
-			Height:    result.Height,
-			FileSize:  int64(len(result.Data)),
-			ObjectKey: variantKey,
-			URL:       s3.GetPublicURL(bucket, variantKey),
-			MimeType:  result.MimeType,
-		})
-	}
-
-	return variants, nil
 }

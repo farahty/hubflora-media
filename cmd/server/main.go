@@ -47,19 +47,23 @@ func main() {
 	// Initialize image processor
 	proc := processing.NewProcessor()
 
-	// Initialize asynq client (for enqueuing tasks)
-	redisOpt, err := queue.ParseRedisURL(cfg.RedisURL)
+	// Initialize Redis/asynq
+	redisOpt, redisErr := queue.ParseRedisURL(cfg.RedisURL)
 	var asynqClient *asynq.Client
-	if err != nil {
-		slog.Warn("redis not configured, async processing disabled", "error", err)
+	var asynqInspector *asynq.Inspector
+	if redisErr != nil {
+		slog.Warn("redis not configured, async processing disabled", "error", redisErr)
 	} else {
 		asynqClient = asynq.NewClient(redisOpt)
 		defer asynqClient.Close()
+
+		asynqInspector = asynq.NewInspector(redisOpt)
+		defer asynqInspector.Close()
 	}
 
 	// Start asynq worker server (for consuming tasks)
 	var asynqServer *asynq.Server
-	if err == nil {
+	if redisErr == nil {
 		asynqServer = asynq.NewServer(redisOpt, asynq.Config{
 			Concurrency: 5,
 			Queues:      map[string]int{"default": 1},
@@ -103,8 +107,12 @@ func main() {
 		r.With(uploadLimiter.Middleware).Post("/upload", handler.Upload(cfg, s3Client, proc, asynqClient))
 		r.Post("/upload/presigned", handler.PresignedUpload(cfg, s3Client))
 
-		// Crop
-		r.Post("/crop", handler.Crop(cfg, s3Client, proc))
+		// Crop (replaces original + optionally regenerates variants)
+		r.Post("/crop", handler.Crop(cfg, s3Client, proc, asynqClient))
+
+		// Variant regeneration
+		r.Post("/variants", handler.VariantRegenerate(asynqClient))
+		r.Get("/variants/info", handler.VariantsInfo(cfg, s3Client))
 
 		// Delete
 		r.Delete("/", handler.Delete(cfg, s3Client))
@@ -117,6 +125,9 @@ func main() {
 
 		// Variant redirect
 		r.Get("/variant/{bucket}/{variantName}/*", handler.VariantRedirect(cfg, s3Client))
+
+		// Job status (async task polling)
+		r.Get("/job/{jobId}", handler.JobStatus(asynqInspector))
 	})
 
 	// Start HTTP server

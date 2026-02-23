@@ -14,3 +14,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 		http.Error(w, fmt.Sprintf(`{"error":"failed to encode response: %v"}`, err), http.StatusInternalServerError)
 	}
 }
+
+// decodeJSON reads and decodes a JSON request body.
+func decodeJSON(r *http.Request, v any) error {
+	return json.NewDecoder(r.Body).Decode(v)
+}

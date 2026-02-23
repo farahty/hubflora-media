@@ -43,6 +43,7 @@ type CropRequest struct {
 type CropResponse struct {
 	Success   bool       `json:"success"`
 	MediaFile *MediaFile `json:"mediaFile,omitempty"`
+	JobID     string     `json:"jobId,omitempty"`
 	Error     string     `json:"error,omitempty"`
 }
 
