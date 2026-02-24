@@ -12,7 +12,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The service starts on `http://localhost:8090`.
+The service starts on `https://media.hubflora.com`.
 
 ## API Endpoints
 
@@ -54,7 +54,7 @@ All `/api/v1/*` routes require `X-Media-API-Key` header matching the `MEDIA_SERV
 ### Health Check
 
 ```bash
-curl http://localhost:8090/healthz
+curl https://media.hubflora.com/healthz
 ```
 
 Response:
@@ -65,7 +65,7 @@ Response:
 ### Upload File
 
 ```bash
-curl -X POST http://localhost:8090/api/v1/media/upload \
+curl -X POST https://media.hubflora.com/api/v1/media/upload \
   -H "X-Media-API-Key: your-api-key" \
   -F "file=@photo.jpg" \
   -F "orgSlug=my-org" \
@@ -90,8 +90,8 @@ Response (`200` sync / `202` async):
     "height": 1080,
     "bucketName": "media",
     "objectKey": "my-org/20240101-120000/photo.jpg",
-    "url": "https://cdn.example.com/my-org/20240101-120000/photo.jpg",
-    "thumbnailUrl": "https://cdn.example.com/my-org/20240101-120000/thumbnail.webp",
+    "url": "https://media.hubflora.com/my-org/20240101-120000/photo.jpg",
+    "thumbnailUrl": "https://media.hubflora.com/my-org/20240101-120000/thumbnail.webp",
     "metadata": {
       "format": "jpeg",
       "space": "srgb",
@@ -108,7 +108,7 @@ Response (`200` sync / `202` async):
 ### Presigned Upload
 
 ```bash
-curl -X POST http://localhost:8090/api/v1/media/upload/presigned \
+curl -X POST https://media.hubflora.com/api/v1/media/upload/presigned \
   -H "X-Media-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -121,7 +121,7 @@ curl -X POST http://localhost:8090/api/v1/media/upload/presigned \
 Response:
 ```json
 {
-  "uploadUrl": "https://s3.example.com/media/my-org/20240101-120000/photo.jpg?X-Amz-...",
+  "uploadUrl": "https://media.hubflora.com/media/my-org/20240101-120000/photo.jpg?X-Amz-...",
   "objectKey": "my-org/20240101-120000/photo.jpg",
   "bucketName": "media"
 }
@@ -130,7 +130,7 @@ Response:
 ### Crop Image
 
 ```bash
-curl -X POST http://localhost:8090/api/v1/media/crop \
+curl -X POST https://media.hubflora.com/api/v1/media/crop \
   -H "X-Media-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -160,7 +160,7 @@ Response (`200` sync / `202` async):
 ### Regenerate Variants
 
 ```bash
-curl -X POST http://localhost:8090/api/v1/media/variants \
+curl -X POST https://media.hubflora.com/api/v1/media/variants \
   -H "X-Media-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -178,7 +178,7 @@ Response (`202`):
 ### Get Variants Info
 
 ```bash
-curl "http://localhost:8090/api/v1/media/variants/info?objectKey=my-org/20240101-120000/photo.jpg" \
+curl "https://media.hubflora.com/api/v1/media/variants/info?objectKey=my-org/20240101-120000/photo.jpg" \
   -H "X-Media-API-Key: your-api-key"
 ```
 
@@ -189,7 +189,7 @@ Response:
   "variants": [
     {
       "objectKey": "my-org/20240101-120000/thumbnail.webp",
-      "url": "https://cdn.example.com/my-org/20240101-120000/thumbnail.webp",
+      "url": "https://media.hubflora.com/my-org/20240101-120000/thumbnail.webp",
       "fileSize": 5120,
       "mimeType": "image/webp"
     }
@@ -200,7 +200,7 @@ Response:
 ### Delete Media
 
 ```bash
-curl -X DELETE http://localhost:8090/api/v1/media/ \
+curl -X DELETE https://media.hubflora.com/api/v1/media/ \
   -H "X-Media-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -216,14 +216,14 @@ Response:
 ### Presign Download URL
 
 ```bash
-curl "http://localhost:8090/api/v1/media/presign?objectKey=my-org/20240101-120000/photo.jpg&expiry=3600" \
+curl "https://media.hubflora.com/api/v1/media/presign?objectKey=my-org/20240101-120000/photo.jpg&expiry=3600" \
   -H "X-Media-API-Key: your-api-key"
 ```
 
 Response:
 ```json
 {
-  "url": "https://s3.example.com/media/my-org/20240101-120000/photo.jpg?X-Amz-...",
+  "url": "https://media.hubflora.com/media/my-org/20240101-120000/photo.jpg?X-Amz-...",
   "expiresAt": "2024-01-01T13:00:00Z"
 }
 ```
@@ -231,7 +231,7 @@ Response:
 ### Download File
 
 ```bash
-curl http://localhost:8090/api/v1/media/download/media/my-org/20240101-120000/photo.jpg \
+curl https://media.hubflora.com/api/v1/media/download/media/my-org/20240101-120000/photo.jpg \
   -H "X-Media-API-Key: your-api-key" \
   -o photo.jpg
 ```
@@ -241,7 +241,7 @@ Returns the binary file stream with `Content-Type` and `Cache-Control: public, m
 ### Variant Redirect
 
 ```bash
-curl -L http://localhost:8090/api/v1/media/variant/media/thumbnail/my-org/20240101-120000/ \
+curl -L https://media.hubflora.com/api/v1/media/variant/media/thumbnail/my-org/20240101-120000/ \
   -H "X-Media-API-Key: your-api-key"
 ```
 
@@ -250,7 +250,7 @@ Returns a `302` redirect to the public variant URL. Valid variant names: `thumbn
 ### Job Status
 
 ```bash
-curl http://localhost:8090/api/v1/media/job/550e8400-e29b-41d4-a716-446655440000 \
+curl https://media.hubflora.com/api/v1/media/job/550e8400-e29b-41d4-a716-446655440000 \
   -H "X-Media-API-Key: your-api-key"
 ```
 
