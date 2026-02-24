@@ -132,6 +132,13 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
 .loading .btn-text{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* Info block */
+.ep-info{margin-bottom:1rem;padding:10px 12px;border-radius:var(--radius);background:var(--bg);border:1px solid var(--border);font-size:12px;line-height:1.6;color:var(--text-dim)}
+.ep-info strong{color:var(--text);font-weight:600}
+.ep-info code{font-family:var(--mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px;color:var(--accent)}
+.ep-info ul{margin:4px 0 0 16px;list-style:disc}
+.ep-info li{margin-bottom:2px}
+
 /* Section divider */
 .section-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);padding:.75rem 1.25rem;background:var(--bg);border-bottom:1px solid var(--border)}
 
@@ -184,6 +191,15 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Verify the service is running and responsive.
+          <ul>
+            <li>Kubernetes / Docker health probes (liveness &amp; readiness)</li>
+            <li>Uptime monitoring dashboards (e.g. UptimeRobot, Datadog)</li>
+            <li>CI/CD pipelines to confirm a deployment succeeded</li>
+          </ul>
+          No authentication required &mdash; safe to expose to load balancers.
+        </div>
         <div class="ep-actions">
           <button class="btn-send primary" onclick="sendHealth(this)">
             <span class="spinner"></span><span class="btn-text">Send Request</span>
@@ -204,6 +220,16 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Upload a file directly from your backend server.
+          <ul>
+            <li>Server-side uploads where your backend has the file (e.g. processing a form submission)</li>
+            <li>Enable <code>generateVariants</code> to auto-create thumbnail, small, medium, large, and WebP versions on upload</li>
+            <li>Use <code>async=true</code> for large images &mdash; returns immediately with a <code>jobId</code> you can poll</li>
+            <li>Use <code>async=false</code> (default) for small images when you need variants ready instantly</li>
+          </ul>
+          Best for: backend-to-backend uploads. For browser-to-S3 uploads, use the presigned upload endpoint instead.
+        </div>
         <div class="form-grid">
           <div class="form-group full">
             <div class="form-label">file <span class="req">*</span></div>
@@ -253,6 +279,15 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Let the client (browser/mobile) upload directly to S3 without routing the file through your server.
+          <ul>
+            <li>Frontend file uploads &mdash; your backend calls this to get a signed URL, then the client <code>PUT</code>s the file directly to S3</li>
+            <li>Reduces server bandwidth and latency for large files</li>
+            <li>The signed URL expires, so it's safe to hand to the client</li>
+          </ul>
+          Typical flow: frontend requests presigned URL &rarr; uploads directly to S3 &rarr; notifies your backend with the <code>objectKey</code>.
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <div class="form-label">orgSlug <span class="req">*</span></div>
@@ -287,6 +322,16 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Crop, rotate, or reformat an already-uploaded image in place.
+          <ul>
+            <li>User-driven image editing &mdash; e.g. a profile photo cropper in your UI sends the crop coordinates here</li>
+            <li>The original file is <strong>replaced</strong> with the cropped version</li>
+            <li>Enable <code>regenerateVariants</code> to rebuild all size variants from the new crop</li>
+            <li>Supports rotation (0/90/180/270), scaling, quality, and format conversion (webp, jpeg, png)</li>
+          </ul>
+          Use <code>async=true</code> if you also regenerate variants, since that adds processing time.
+        </div>
         <div class="form-grid">
           <div class="form-group full">
             <div class="form-label">objectKey <span class="req">*</span></div>
@@ -360,6 +405,15 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Rebuild all image variants (thumbnail, small, medium, large, original_webp) from the current original file.
+          <ul>
+            <li>After a presigned upload &mdash; the file is in S3 but no variants exist yet</li>
+            <li>After changing variant size/quality definitions and you need to backfill existing images</li>
+            <li>If variants were corrupted or accidentally deleted</li>
+          </ul>
+          Always runs asynchronously &mdash; returns a <code>jobId</code> to poll via the Job Status endpoint. Requires Redis.
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <div class="form-label">objectKey <span class="req">*</span></div>
@@ -387,6 +441,15 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> List all generated variants (with URLs, sizes, and MIME types) for a given original file.
+          <ul>
+            <li>Build responsive <code>&lt;picture&gt;</code> / <code>srcset</code> elements by fetching available sizes</li>
+            <li>Admin panels &mdash; show which variants exist and their file sizes</li>
+            <li>Verify that variant generation completed successfully</li>
+          </ul>
+          Scans the S3 folder for the given object and returns all files found alongside the original.
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <div class="form-label">objectKey <span class="req">*</span></div>
@@ -414,6 +477,15 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Get a redirect to the public CDN URL for a specific variant by name.
+          <ul>
+            <li>Quick access when you know the variant name you want (<code>thumbnail</code>, <code>small</code>, <code>medium</code>, <code>large</code>, <code>original_webp</code>)</li>
+            <li>Useful in server-side rendering &mdash; resolve the variant URL without storing it in your database</li>
+            <li>Returns a <code>302</code> redirect to the CDN URL, so the client follows it automatically</li>
+          </ul>
+          Returns 404 if the requested variant doesn't exist for that file.
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <div class="form-label">bucket <span class="req">*</span></div>
@@ -454,6 +526,15 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Generate a temporary, signed download URL for a file stored in S3.
+          <ul>
+            <li>Private files that should not be publicly accessible via CDN</li>
+            <li>Time-limited access &mdash; share a link that expires (1 second to 24 hours)</li>
+            <li>The URL points directly to S3 (not CDN) since the signature is bound to the origin host</li>
+          </ul>
+          If your files are public and served via CDN, you don't need this &mdash; use the CDN URL from the upload response instead.
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <div class="form-label">objectKey <span class="req">*</span></div>
@@ -485,6 +566,15 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Stream a file directly through the media service (proxied from S3).
+          <ul>
+            <li>When you need authenticated downloads &mdash; the request requires the API key</li>
+            <li>Useful if S3 is not publicly accessible and you can't use presigned URLs</li>
+            <li>Sets <code>Cache-Control: public, max-age=31536000, immutable</code> for browser caching</li>
+          </ul>
+          For public files, prefer serving via CDN directly instead of proxying through this endpoint.
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <div class="form-label">bucket <span class="req">*</span></div>
@@ -515,6 +605,15 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Permanently delete a file and all of its generated variants from S3.
+          <ul>
+            <li>User deletes a photo or attachment from your application</li>
+            <li>Cleanup after content moderation flags inappropriate content</li>
+            <li>Deletes the entire folder prefix &mdash; original + thumbnail + small + medium + large + original_webp</li>
+          </ul>
+          <strong>This action is irreversible.</strong> Ensure your application confirms with the user before calling this endpoint.
+        </div>
         <div class="form-grid">
           <div class="form-group">
             <div class="form-label">objectKey <span class="req">*</span></div>
@@ -545,6 +644,16 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         <span class="ep-chevron">&#9654;</span>
       </div>
       <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Check the progress of an async variant generation or crop job.
+          <ul>
+            <li>Poll after receiving a <code>jobId</code> from upload (async), crop (async), or variant regeneration</li>
+            <li>States: <code>pending</code> &rarr; <code>active</code> &rarr; <code>completed</code> or <code>failed</code></li>
+            <li>Use for progress bars or "processing..." indicators in your UI</li>
+            <li>If <code>failed</code>, the <code>failedReason</code> field explains what went wrong</li>
+          </ul>
+          Requires Redis to be configured. Returns 503 if async processing is disabled.
+        </div>
         <div class="form-grid single">
           <div class="form-group">
             <div class="form-label">jobId <span class="req">*</span></div>
