@@ -36,6 +36,11 @@ export class HubfloraMediaClient {
     this.timeout = config.timeout ?? 120_000;
   }
 
+  /** Returns the base URL and API key (used by React hooks for XHR uploads). */
+  getConfig(): { baseUrl: string; apiKey: string } {
+    return { baseUrl: this.baseUrl, apiKey: this.apiKey };
+  }
+
   // ─── Upload ────────────────────────────────────────────────────────
 
   /**

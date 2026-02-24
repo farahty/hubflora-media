@@ -1,7 +1,7 @@
 {
   "name": "@hubflora/media-client",
-  "version": "0.1.0",
-  "description": "TypeScript/JavaScript client for the hubflora-media service",
+  "version": "0.2.0",
+  "description": "TypeScript/JavaScript client for the hubflora-media service with React hooks",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -16,6 +16,16 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
     }
   },
   "files": [
@@ -28,7 +38,17 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@types/react": "^18.0.0",
+    "react": "^18.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0"
   },
@@ -37,7 +57,9 @@
     "media",
     "upload",
     "image-processing",
-    "s3"
+    "s3",
+    "react",
+    "nextjs"
   ],
   "license": "MIT"
 }
