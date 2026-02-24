@@ -22,8 +22,10 @@ FROM alpine:3.21
 # Install libvips runtime
 RUN apk add --no-cache vips ca-certificates
 
-COPY --from=builder /hubflora-media /hubflora-media
+WORKDIR /app
+COPY --from=builder /hubflora-media /app/hubflora-media
+COPY web/ /app/web/
 
 EXPOSE 8090
 
-ENTRYPOINT ["/hubflora-media"]
+ENTRYPOINT ["/app/hubflora-media"]

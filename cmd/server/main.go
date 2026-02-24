@@ -95,6 +95,9 @@ func main() {
 		MaxAge:           300,
 	}))
 
+	// Showcase page
+	r.Get("/", handler.Showcase())
+
 	// Health check (no auth)
 	r.Get("/healthz", handler.Health())
 

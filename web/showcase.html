@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hubflora media ~ API Playground</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0c;--bg2:#111115;--bg3:#18181e;--bg4:#1e1e26;
+  --border:#2a2a35;--border-h:#3a3a48;
+  --text:#c8c8d4;--text-dim:#6a6a7a;--text-bright:#eeeef4;
+  --accent:#22d67a;--accent-dim:#1a9e5c;--accent-glow:rgba(34,214,122,.12);
+  --red:#ef4444;--orange:#f59e0b;--blue:#3b82f6;--purple:#a855f7;
+  --method-get:#22d67a;--method-post:#3b82f6;--method-delete:#ef4444;
+  --radius:6px;--mono:'JetBrains Mono',monospace;--sans:'DM Sans',sans-serif;
+}
+html{font-size:14px;-webkit-font-smoothing:antialiased}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+/* Grain overlay */
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");
+  opacity:.5}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:9px}
+::-webkit-scrollbar-thumb:hover{background:var(--border-h)}
+
+/* Header */
+.header{position:sticky;top:0;z-index:100;background:rgba(10,10,12,.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
+.header-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+.logo{display:flex;align-items:center;gap:.6rem}
+.logo-mark{width:28px;height:28px;background:var(--accent);border-radius:6px;display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:13px;color:var(--bg);letter-spacing:-.5px}
+.logo-text{font-family:var(--mono);font-weight:600;font-size:15px;color:var(--text-bright);letter-spacing:-.3px}
+.logo-text span{color:var(--text-dim);font-weight:400}
+
+/* API Key bar */
+.key-bar{display:flex;align-items:center;gap:.5rem}
+.key-bar label{font-family:var(--mono);font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+.key-input{font-family:var(--mono);font-size:12px;background:var(--bg3);border:1px solid var(--border);color:var(--text-bright);padding:6px 10px;border-radius:var(--radius);width:240px;outline:none;transition:border .2s}
+.key-input:focus{border-color:var(--accent)}
+.key-input::placeholder{color:var(--text-dim)}
+
+/* Layout */
+.main{max-width:1200px;margin:0 auto;padding:2rem}
+.intro{margin-bottom:2.5rem}
+.intro h1{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--text-bright);margin-bottom:.4rem;letter-spacing:-.5px}
+.intro p{color:var(--text-dim);font-size:14px;line-height:1.5}
+
+/* Endpoint cards */
+.endpoints{display:flex;flex-direction:column;gap:1px;background:var(--border);border-radius:8px;overflow:hidden;border:1px solid var(--border)}
+.endpoint{background:var(--bg2);transition:background .15s}
+.endpoint.open{background:var(--bg3)}
+
+/* Endpoint header */
+.ep-header{display:flex;align-items:center;gap:.75rem;padding:.85rem 1.25rem;cursor:pointer;user-select:none;transition:background .15s}
+.ep-header:hover{background:rgba(255,255,255,.02)}
+.method{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;letter-spacing:.5px;min-width:56px;text-align:center}
+.method.get{color:var(--method-get);background:rgba(34,214,122,.1);border:1px solid rgba(34,214,122,.2)}
+.method.post{color:var(--method-post);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2)}
+.method.delete{color:var(--method-delete);background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2)}
+.ep-path{font-family:var(--mono);font-size:13px;color:var(--text-bright);flex:1}
+.ep-path .param{color:var(--orange)}
+.ep-desc{font-size:12px;color:var(--text-dim);margin-right:.5rem}
+.ep-chevron{color:var(--text-dim);transition:transform .2s;font-size:10px}
+.endpoint.open .ep-chevron{transform:rotate(90deg)}
+.ep-badge{font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);border:1px solid var(--border)}
+
+/* Endpoint body */
+.ep-body{display:none;padding:1.25rem;border-top:1px solid var(--border)}
+.endpoint.open .ep-body{display:block}
+
+/* Form groups */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.form-grid.single{grid-template-columns:1fr}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group.full{grid-column:1/-1}
+.form-label{font-family:var(--mono);font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.3px;display:flex;align-items:center;gap:4px}
+.form-label .req{color:var(--red);font-size:10px}
+.form-input,.form-select{font-family:var(--mono);font-size:12px;background:var(--bg);border:1px solid var(--border);color:var(--text-bright);padding:8px 10px;border-radius:var(--radius);outline:none;transition:border .2s;width:100%}
+.form-input:focus,.form-select:focus{border-color:var(--accent)}
+.form-input::placeholder{color:var(--text-dim)}
+.form-select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236a6a7a'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.form-select option{background:var(--bg2);color:var(--text)}
+.form-check{display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--text)}
+.form-check input[type="checkbox"]{accent-color:var(--accent);cursor:pointer}
+
+/* File drop */
+.file-drop{border:1.5px dashed var(--border);border-radius:var(--radius);padding:1.5rem;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg)}
+.file-drop:hover,.file-drop.dragover{border-color:var(--accent);background:var(--accent-glow)}
+.file-drop-text{font-family:var(--mono);font-size:12px;color:var(--text-dim)}
+.file-drop-text .highlight{color:var(--accent)}
+.file-drop-name{font-family:var(--mono);font-size:11px;color:var(--accent);margin-top:6px}
+
+/* Send button */
+.ep-actions{display:flex;align-items:center;gap:.75rem;margin-top:1rem}
+.btn-send{font-family:var(--mono);font-size:12px;font-weight:600;padding:8px 20px;border-radius:var(--radius);border:none;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;letter-spacing:.3px}
+.btn-send.primary{background:var(--accent);color:var(--bg);text-transform:uppercase}
+.btn-send.primary:hover{background:var(--accent-dim);transform:translateY(-1px)}
+.btn-send.primary:active{transform:translateY(0)}
+.btn-send:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.btn-send.danger{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3);text-transform:uppercase}
+.btn-send.danger:hover{background:rgba(239,68,68,.25)}
+
+/* Response panel */
+.response-panel{margin-top:1rem;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);background:var(--bg)}
+.response-header{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--border)}
+.response-title{font-family:var(--mono);font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+.response-status{font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 8px;border-radius:3px}
+.response-status.s2xx{color:var(--accent);background:rgba(34,214,122,.1)}
+.response-status.s4xx{color:var(--orange);background:rgba(245,158,11,.1)}
+.response-status.s5xx{color:var(--red);background:rgba(239,68,68,.1)}
+.response-body{padding:12px;font-family:var(--mono);font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;color:var(--text)}
+.response-meta{display:flex;gap:1rem;padding:8px 12px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--text-dim)}
+
+/* JSON syntax */
+.json-key{color:#7dd3fc}
+.json-string{color:#86efac}
+.json-number{color:#fbbf24}
+.json-bool{color:#c084fc}
+.json-null{color:#6a6a7a}
+.json-bracket{color:var(--text-dim)}
+
+/* Spinner */
+.spinner{width:14px;height:14px;border:2px solid transparent;border-top-color:currentColor;border-radius:50%;animation:spin .6s linear infinite;display:none}
+.loading .spinner{display:inline-block}
+.loading .btn-text{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Section divider */
+.section-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);padding:.75rem 1.25rem;background:var(--bg);border-bottom:1px solid var(--border)}
+
+/* Responsive */
+@media(max-width:768px){
+  .header-inner{flex-direction:column;height:auto;padding:.75rem 0;gap:.5rem}
+  .main{padding:1rem}
+  .form-grid{grid-template-columns:1fr}
+  .ep-desc{display:none}
+  .key-input{width:180px}
+}
+
+/* Animations */
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.ep-body{animation:fadeIn .2s ease}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-mark">hf</div>
+      <div class="logo-text">hubflora<span>/media</span></div>
+    </div>
+    <div class="key-bar">
+      <label for="apiKey">api key</label>
+      <input type="password" id="apiKey" class="key-input" placeholder="X-Media-API-Key" autocomplete="off">
+    </div>
+  </div>
+</header>
+
+<main class="main">
+  <div class="intro">
+    <h1>API Playground</h1>
+    <p>Test every endpoint interactively. Set your API key above, fill in the parameters, and hit send.</p>
+  </div>
+
+  <div class="endpoints">
+
+    <!-- Health -->
+    <div class="section-label">System</div>
+
+    <div class="endpoint" data-id="health">
+      <div class="ep-header" onclick="toggle('health')">
+        <span class="method get">GET</span>
+        <span class="ep-path">/healthz</span>
+        <span class="ep-desc">Health check</span>
+        <span class="ep-badge">no auth</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendHealth(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-health" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Upload -->
+    <div class="section-label">Upload</div>
+
+    <div class="endpoint" data-id="upload">
+      <div class="ep-header" onclick="toggle('upload')">
+        <span class="method post">POST</span>
+        <span class="ep-path">/api/v1/media/upload</span>
+        <span class="ep-desc">Upload file with optional variants</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid">
+          <div class="form-group full">
+            <div class="form-label">file <span class="req">*</span></div>
+            <div class="file-drop" id="fileDrop-upload" onclick="document.getElementById('fileInput-upload').click()">
+              <input type="file" id="fileInput-upload" style="display:none" onchange="handleFile(this,'upload')">
+              <div class="file-drop-text">Drop file here or <span class="highlight">browse</span></div>
+              <div class="file-drop-name" id="fileName-upload"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="form-label">orgSlug <span class="req">*</span></div>
+            <input type="text" class="form-input" id="upload-orgSlug" placeholder="my-org">
+          </div>
+          <div class="form-group">
+            <div class="form-label">alt</div>
+            <input type="text" class="form-input" id="upload-alt" placeholder="Alt text">
+          </div>
+          <div class="form-group">
+            <div class="form-label">caption</div>
+            <input type="text" class="form-input" id="upload-caption" placeholder="Caption">
+          </div>
+          <div class="form-group">
+            <div class="form-label">description</div>
+            <input type="text" class="form-input" id="upload-description" placeholder="Description">
+          </div>
+          <div class="form-group">
+            <label class="form-check"><input type="checkbox" id="upload-generateVariants"> generateVariants</label>
+          </div>
+          <div class="form-group">
+            <label class="form-check"><input type="checkbox" id="upload-async"> async</label>
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendUpload(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-upload" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="endpoint" data-id="presigned-upload">
+      <div class="ep-header" onclick="toggle('presigned-upload')">
+        <span class="method post">POST</span>
+        <span class="ep-path">/api/v1/media/upload/presigned</span>
+        <span class="ep-desc">Get presigned upload URL</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="form-label">orgSlug <span class="req">*</span></div>
+            <input type="text" class="form-input" id="presigned-orgSlug" placeholder="my-org">
+          </div>
+          <div class="form-group">
+            <div class="form-label">filename <span class="req">*</span></div>
+            <input type="text" class="form-input" id="presigned-filename" placeholder="photo.jpg">
+          </div>
+          <div class="form-group">
+            <div class="form-label">mimeType</div>
+            <input type="text" class="form-input" id="presigned-mimeType" placeholder="image/jpeg">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendPresignedUpload(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-presigned-upload" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Processing -->
+    <div class="section-label">Processing</div>
+
+    <div class="endpoint" data-id="crop">
+      <div class="ep-header" onclick="toggle('crop')">
+        <span class="method post">POST</span>
+        <span class="ep-path">/api/v1/media/crop</span>
+        <span class="ep-desc">Crop an image</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid">
+          <div class="form-group full">
+            <div class="form-label">objectKey <span class="req">*</span></div>
+            <input type="text" class="form-input" id="crop-objectKey" placeholder="my-org/20240101-120000/photo.jpg">
+          </div>
+          <div class="form-group">
+            <div class="form-label">bucketName</div>
+            <input type="text" class="form-input" id="crop-bucketName" placeholder="media">
+          </div>
+          <div class="form-group">
+            <div class="form-label">format</div>
+            <select class="form-select" id="crop-format">
+              <option value="">auto</option>
+              <option value="webp">webp</option>
+              <option value="jpeg">jpeg</option>
+              <option value="png">png</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <div class="form-label">x</div>
+            <input type="number" class="form-input" id="crop-x" placeholder="0" value="0">
+          </div>
+          <div class="form-group">
+            <div class="form-label">y</div>
+            <input type="number" class="form-input" id="crop-y" placeholder="0" value="0">
+          </div>
+          <div class="form-group">
+            <div class="form-label">width <span class="req">*</span></div>
+            <input type="number" class="form-input" id="crop-width" placeholder="800">
+          </div>
+          <div class="form-group">
+            <div class="form-label">height <span class="req">*</span></div>
+            <input type="number" class="form-input" id="crop-height" placeholder="600">
+          </div>
+          <div class="form-group">
+            <div class="form-label">rotate</div>
+            <input type="number" class="form-input" id="crop-rotate" placeholder="0" value="0" step="0.1">
+          </div>
+          <div class="form-group">
+            <div class="form-label">scale</div>
+            <input type="number" class="form-input" id="crop-scale" placeholder="1.0" value="1" step="0.1">
+          </div>
+          <div class="form-group">
+            <div class="form-label">quality</div>
+            <input type="number" class="form-input" id="crop-quality" placeholder="90" value="90" min="1" max="100">
+          </div>
+          <div class="form-group">
+            <label class="form-check"><input type="checkbox" id="crop-regenerateVariants"> regenerateVariants</label>
+          </div>
+          <div class="form-group">
+            <label class="form-check"><input type="checkbox" id="crop-async"> async</label>
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendCrop(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-crop" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Variants -->
+    <div class="section-label">Variants</div>
+
+    <div class="endpoint" data-id="regen-variants">
+      <div class="ep-header" onclick="toggle('regen-variants')">
+        <span class="method post">POST</span>
+        <span class="ep-path">/api/v1/media/variants</span>
+        <span class="ep-desc">Regenerate variants</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="form-label">objectKey <span class="req">*</span></div>
+            <input type="text" class="form-input" id="regen-objectKey" placeholder="my-org/20240101-120000/photo.jpg">
+          </div>
+          <div class="form-group">
+            <div class="form-label">bucketName</div>
+            <input type="text" class="form-input" id="regen-bucketName" placeholder="media">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendRegenVariants(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-regen-variants" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="endpoint" data-id="variants-info">
+      <div class="ep-header" onclick="toggle('variants-info')">
+        <span class="method get">GET</span>
+        <span class="ep-path">/api/v1/media/variants/info</span>
+        <span class="ep-desc">Get variants info</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="form-label">objectKey <span class="req">*</span></div>
+            <input type="text" class="form-input" id="varinfo-objectKey" placeholder="my-org/20240101-120000/photo.jpg">
+          </div>
+          <div class="form-group">
+            <div class="form-label">bucket</div>
+            <input type="text" class="form-input" id="varinfo-bucket" placeholder="media">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendVariantsInfo(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-variants-info" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="endpoint" data-id="variant-redirect">
+      <div class="ep-header" onclick="toggle('variant-redirect')">
+        <span class="method get">GET</span>
+        <span class="ep-path">/api/v1/media/variant/<span class="param">{bucket}</span>/<span class="param">{variantName}</span>/*</span>
+        <span class="ep-desc">Variant redirect</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="form-label">bucket <span class="req">*</span></div>
+            <input type="text" class="form-input" id="varred-bucket" placeholder="media">
+          </div>
+          <div class="form-group">
+            <div class="form-label">variantName <span class="req">*</span></div>
+            <select class="form-select" id="varred-variantName">
+              <option value="thumbnail">thumbnail</option>
+              <option value="small">small</option>
+              <option value="medium">medium</option>
+              <option value="large">large</option>
+              <option value="original_webp">original_webp</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <div class="form-label">path (folder) <span class="req">*</span></div>
+            <input type="text" class="form-input" id="varred-path" placeholder="my-org/20240101-120000/">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendVariantRedirect(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-variant-redirect" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Downloads -->
+    <div class="section-label">Downloads</div>
+
+    <div class="endpoint" data-id="presign-download">
+      <div class="ep-header" onclick="toggle('presign-download')">
+        <span class="method get">GET</span>
+        <span class="ep-path">/api/v1/media/presign</span>
+        <span class="ep-desc">Presign download URL</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="form-label">objectKey <span class="req">*</span></div>
+            <input type="text" class="form-input" id="presign-objectKey" placeholder="my-org/20240101-120000/photo.jpg">
+          </div>
+          <div class="form-group">
+            <div class="form-label">bucket</div>
+            <input type="text" class="form-input" id="presign-bucket" placeholder="media">
+          </div>
+          <div class="form-group">
+            <div class="form-label">expiry (seconds)</div>
+            <input type="number" class="form-input" id="presign-expiry" placeholder="3600" value="3600" min="1" max="86400">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendPresignDownload(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-presign-download" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="endpoint" data-id="download">
+      <div class="ep-header" onclick="toggle('download')">
+        <span class="method get">GET</span>
+        <span class="ep-path">/api/v1/media/download/<span class="param">{bucket}</span>/*</span>
+        <span class="ep-desc">Download file</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="form-label">bucket <span class="req">*</span></div>
+            <input type="text" class="form-input" id="dl-bucket" placeholder="media">
+          </div>
+          <div class="form-group full">
+            <div class="form-label">objectKey (path) <span class="req">*</span></div>
+            <input type="text" class="form-input" id="dl-objectKey" placeholder="my-org/20240101-120000/photo.jpg">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendDownload(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-download" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Delete -->
+    <div class="section-label">Delete</div>
+
+    <div class="endpoint" data-id="delete">
+      <div class="ep-header" onclick="toggle('delete')">
+        <span class="method delete">DELETE</span>
+        <span class="ep-path">/api/v1/media/</span>
+        <span class="ep-desc">Delete file + variants</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="form-label">objectKey <span class="req">*</span></div>
+            <input type="text" class="form-input" id="del-objectKey" placeholder="my-org/20240101-120000/photo.jpg">
+          </div>
+          <div class="form-group">
+            <div class="form-label">bucketName</div>
+            <input type="text" class="form-input" id="del-bucketName" placeholder="media">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send danger" onclick="sendDelete(this)">
+            <span class="spinner"></span><span class="btn-text">Delete</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-delete" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Jobs -->
+    <div class="section-label">Jobs</div>
+
+    <div class="endpoint" data-id="job-status">
+      <div class="ep-header" onclick="toggle('job-status')">
+        <span class="method get">GET</span>
+        <span class="ep-path">/api/v1/media/job/<span class="param">{jobId}</span></span>
+        <span class="ep-desc">Poll async job status</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="form-grid single">
+          <div class="form-group">
+            <div class="form-label">jobId <span class="req">*</span></div>
+            <input type="text" class="form-input" id="job-jobId" placeholder="550e8400-e29b-41d4-a716-446655440000">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendJobStatus(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-job-status" style="display:none"></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// Toggle endpoint open/close
+function toggle(id) {
+  const el = document.querySelector(`.endpoint[data-id="${id}"]`);
+  el.classList.toggle('open');
+}
+
+// File handling
+function handleFile(input, id) {
+  const name = input.files[0]?.name || '';
+  document.getElementById(`fileName-${id}`).textContent = name;
+  if (name) document.getElementById(`fileDrop-${id}`).classList.add('dragover');
+}
+
+// Setup drag-and-drop for file inputs
+document.querySelectorAll('.file-drop').forEach(drop => {
+  const id = drop.id.replace('fileDrop-', '');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    const input = document.getElementById(`fileInput-${id}`);
+    input.files = e.dataTransfer.files;
+    handleFile(input, id);
+  });
+});
+
+// Helpers
+function apiKey() { return document.getElementById('apiKey').value; }
+function val(id) { return document.getElementById(id).value.trim(); }
+function checked(id) { return document.getElementById(id).checked; }
+
+function setLoading(btn, loading) {
+  if (loading) { btn.classList.add('loading'); btn.disabled = true; }
+  else { btn.classList.remove('loading'); btn.disabled = false; }
+}
+
+// JSON syntax highlighting
+function highlightJSON(str) {
+  return str.replace(/("(?:\\.|[^"\\])*")\s*:/g, '<span class="json-key">$1</span>:')
+    .replace(/:\s*("(?:\\.|[^"\\])*")/g, ': <span class="json-string">$1</span>')
+    .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+    .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
+    .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>')
+    .replace(/([{}\[\]])/g, '<span class="json-bracket">$1</span>');
+}
+
+function renderResponse(panelId, status, body, duration) {
+  const panel = document.getElementById(panelId);
+  panel.style.display = 'block';
+  const statusClass = status < 300 ? 's2xx' : status < 500 ? 's4xx' : 's5xx';
+  let formatted = body;
+  let highlighted = '';
+  try {
+    const parsed = JSON.parse(body);
+    formatted = JSON.stringify(parsed, null, 2);
+    highlighted = highlightJSON(formatted);
+  } catch {
+    highlighted = formatted;
+  }
+  panel.innerHTML = `
+    <div class="response-header">
+      <span class="response-title">Response</span>
+      <span class="response-status ${statusClass}">${status}</span>
+    </div>
+    <div class="response-body">${highlighted}</div>
+    <div class="response-meta">
+      <span>${duration}ms</span>
+    </div>`;
+}
+
+function renderError(panelId, err) {
+  const panel = document.getElementById(panelId);
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="response-header">
+      <span class="response-title">Error</span>
+      <span class="response-status s5xx">ERR</span>
+    </div>
+    <div class="response-body" style="color:var(--red)">${err}</div>`;
+}
+
+async function request(method, url, { headers = {}, body = null } = {}) {
+  const h = { ...headers };
+  const key = apiKey();
+  if (key) h['X-Media-API-Key'] = key;
+  const start = performance.now();
+  const res = await fetch(url, { method, headers: h, body, redirect: 'follow' });
+  const duration = Math.round(performance.now() - start);
+  const text = await res.text();
+  return { status: res.status, body: text, duration };
+}
+
+// Endpoint handlers
+async function sendHealth(btn) {
+  setLoading(btn, true);
+  try {
+    const r = await request('GET', '/healthz');
+    renderResponse('res-health', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-health', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendUpload(btn) {
+  setLoading(btn, true);
+  try {
+    const fd = new FormData();
+    const file = document.getElementById('fileInput-upload').files[0];
+    if (!file) { renderError('res-upload', 'No file selected'); setLoading(btn, false); return; }
+    fd.append('file', file);
+    fd.append('orgSlug', val('upload-orgSlug'));
+    fd.append('generateVariants', checked('upload-generateVariants').toString());
+    fd.append('async', checked('upload-async').toString());
+    if (val('upload-alt')) fd.append('alt', val('upload-alt'));
+    if (val('upload-caption')) fd.append('caption', val('upload-caption'));
+    if (val('upload-description')) fd.append('description', val('upload-description'));
+    const r = await request('POST', '/api/v1/media/upload', { body: fd });
+    renderResponse('res-upload', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-upload', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendPresignedUpload(btn) {
+  setLoading(btn, true);
+  try {
+    const payload = { orgSlug: val('presigned-orgSlug'), filename: val('presigned-filename') };
+    if (val('presigned-mimeType')) payload.mimeType = val('presigned-mimeType');
+    const r = await request('POST', '/api/v1/media/upload/presigned', {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    renderResponse('res-presigned-upload', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-presigned-upload', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendCrop(btn) {
+  setLoading(btn, true);
+  try {
+    const payload = {
+      objectKey: val('crop-objectKey'),
+      x: parseInt(val('crop-x')) || 0,
+      y: parseInt(val('crop-y')) || 0,
+      width: parseInt(val('crop-width')) || 0,
+      height: parseInt(val('crop-height')) || 0,
+      rotate: parseFloat(val('crop-rotate')) || 0,
+      scale: parseFloat(val('crop-scale')) || 1,
+      quality: parseInt(val('crop-quality')) || 90,
+      regenerateVariants: checked('crop-regenerateVariants'),
+      async: checked('crop-async')
+    };
+    if (val('crop-bucketName')) payload.bucketName = val('crop-bucketName');
+    if (val('crop-format')) payload.format = val('crop-format');
+    const r = await request('POST', '/api/v1/media/crop', {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    renderResponse('res-crop', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-crop', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendRegenVariants(btn) {
+  setLoading(btn, true);
+  try {
+    const payload = { objectKey: val('regen-objectKey') };
+    if (val('regen-bucketName')) payload.bucketName = val('regen-bucketName');
+    const r = await request('POST', '/api/v1/media/variants', {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    renderResponse('res-regen-variants', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-regen-variants', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendVariantsInfo(btn) {
+  setLoading(btn, true);
+  try {
+    const params = new URLSearchParams();
+    params.set('objectKey', val('varinfo-objectKey'));
+    if (val('varinfo-bucket')) params.set('bucket', val('varinfo-bucket'));
+    const r = await request('GET', `/api/v1/media/variants/info?${params}`);
+    renderResponse('res-variants-info', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-variants-info', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendVariantRedirect(btn) {
+  setLoading(btn, true);
+  try {
+    const bucket = val('varred-bucket');
+    const variant = val('varred-variantName');
+    const path = val('varred-path');
+    const r = await request('GET', `/api/v1/media/variant/${bucket}/${variant}/${path}`);
+    renderResponse('res-variant-redirect', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-variant-redirect', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendPresignDownload(btn) {
+  setLoading(btn, true);
+  try {
+    const params = new URLSearchParams();
+    params.set('objectKey', val('presign-objectKey'));
+    if (val('presign-bucket')) params.set('bucket', val('presign-bucket'));
+    if (val('presign-expiry')) params.set('expiry', val('presign-expiry'));
+    const r = await request('GET', `/api/v1/media/presign?${params}`);
+    renderResponse('res-presign-download', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-presign-download', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendDownload(btn) {
+  setLoading(btn, true);
+  try {
+    const bucket = val('dl-bucket');
+    const key = val('dl-objectKey');
+    const url = `/api/v1/media/download/${bucket}/${key}`;
+    const h = {};
+    const k = apiKey();
+    if (k) h['X-Media-API-Key'] = k;
+    const start = performance.now();
+    const res = await fetch(url, { headers: h });
+    const duration = Math.round(performance.now() - start);
+    if (!res.ok) {
+      const text = await res.text();
+      renderResponse('res-download', res.status, text, duration);
+    } else {
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = key.split('/').pop() || 'download';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      renderResponse('res-download', res.status, JSON.stringify({
+        message: 'File downloaded',
+        size: blob.size,
+        type: blob.type
+      }), duration);
+    }
+  } catch (e) { renderError('res-download', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendDelete(btn) {
+  setLoading(btn, true);
+  try {
+    const payload = { objectKey: val('del-objectKey') };
+    if (val('del-bucketName')) payload.bucketName = val('del-bucketName');
+    const r = await request('DELETE', '/api/v1/media/', {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    renderResponse('res-delete', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-delete', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendJobStatus(btn) {
+  setLoading(btn, true);
+  try {
+    const jobId = val('job-jobId');
+    const r = await request('GET', `/api/v1/media/job/${jobId}`);
+    renderResponse('res-job-status', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-job-status', e.message); }
+  setLoading(btn, false);
+}
+
+// Persist API key
+const saved = localStorage.getItem('hf-media-api-key');
+if (saved) document.getElementById('apiKey').value = saved;
+document.getElementById('apiKey').addEventListener('input', e => {
+  localStorage.setItem('hf-media-api-key', e.target.value);
+});
+</script>
+</body>
+</html>
