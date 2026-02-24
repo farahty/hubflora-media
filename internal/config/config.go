@@ -51,7 +51,7 @@ func Load() (*Config, error) {
 
 		RedisURL: envStr("REDIS_URL", "redis://localhost:6379"),
 
-		APIKey: envStr("API_KEY", ""),
+		APIKey: envStr("MEDIA_SERVICE_API_KEY", ""),
 
 		AllowedOrigins: strings.Split(envStr("ALLOWED_CORS_ORIGINS", "*"), ","),
 
@@ -63,7 +63,7 @@ func Load() (*Config, error) {
 	}
 
 	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("API_KEY is required")
+		return nil, fmt.Errorf("MEDIA_SERVICE_API_KEY is required")
 	}
 
 	return cfg, nil
