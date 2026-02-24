@@ -30,15 +30,24 @@ func (p *Processor) ProcessImage(input []byte, variant ImageVariant) (*ProcessRe
 	bimgType := toBimgType(variant.Format)
 
 	opts := bimg.Options{
-		Width:   variant.Width,
-		Height:  variant.Height,
 		Quality: variant.Quality,
 		Type:    bimgType,
 	}
 
 	if variant.Fit == FitCover {
+		opts.Width = variant.Width
+		opts.Height = variant.Height
 		opts.Crop = true
 		opts.Gravity = bimg.GravitySmart
+	} else {
+		// FitInside: scale down to fit within bounds while preserving aspect ratio
+		srcSize, err := img.Size()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get source size: %w", err)
+		}
+		w, h := fitInside(srcSize.Width, srcSize.Height, variant.Width, variant.Height)
+		opts.Width = w
+		opts.Height = h
 	}
 
 	output, err := img.Process(opts)
@@ -170,6 +179,20 @@ func IsImageMimeType(mimeType string) bool {
 	default:
 		return false
 	}
+}
+
+// fitInside calculates dimensions that fit within maxW x maxH while preserving aspect ratio.
+func fitInside(srcW, srcH, maxW, maxH int) (int, int) {
+	if srcW <= maxW && srcH <= maxH {
+		return srcW, srcH
+	}
+	ratioW := float64(maxW) / float64(srcW)
+	ratioH := float64(maxH) / float64(srcH)
+	ratio := ratioW
+	if ratioH < ratioW {
+		ratio = ratioH
+	}
+	return int(float64(srcW) * ratio), int(float64(srcH) * ratio)
 }
 
 func toBimgType(f Format) bimg.ImageType {
