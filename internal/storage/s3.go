@@ -33,22 +33,21 @@ func NewS3Client(cfg *config.Config) (*S3Client, error) {
 	return &S3Client{client: client, cfg: cfg}, nil
 }
 
-// EnsureBucket creates the default bucket if it doesn't exist.
+// EnsureBucket creates the default bucket if it doesn't exist and ensures public-read policy.
 func (s *S3Client) EnsureBucket(ctx context.Context) error {
 	bucket := s.cfg.MinioDefaultBucket
 	exists, err := s.client.BucketExists(ctx, bucket)
 	if err != nil {
 		return fmt.Errorf("failed to check bucket existence: %w", err)
 	}
-	if exists {
-		return nil
+
+	if !exists {
+		if err := s.client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
+			return fmt.Errorf("failed to create bucket %q: %w", bucket, err)
+		}
 	}
 
-	if err := s.client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
-		return fmt.Errorf("failed to create bucket %q: %w", bucket, err)
-	}
-
-	// Set public-read policy
+	// Always ensure public-read policy so CDN can serve objects
 	policy := fmt.Sprintf(`{
 		"Version": "2012-10-17",
 		"Statement": [{
