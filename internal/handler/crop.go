@@ -19,14 +19,18 @@ import (
 
 // CropInputRequest is the JSON body for cropping.
 type CropInputRequest struct {
-	ObjectKey          string `json:"objectKey"`
-	BucketName         string `json:"bucketName"`
-	X                  int    `json:"x"`
-	Y                  int    `json:"y"`
-	Width              int    `json:"width"`
-	Height             int    `json:"height"`
-	RegenerateVariants bool   `json:"regenerateVariants"`
-	Async              bool   `json:"async"`
+	ObjectKey          string  `json:"objectKey"`
+	BucketName         string  `json:"bucketName"`
+	X                  int     `json:"x"`
+	Y                  int     `json:"y"`
+	Width              int     `json:"width"`
+	Height             int     `json:"height"`
+	Rotate             float64 `json:"rotate"`             // rotation degrees (0, 90, 180, 270)
+	Scale              float64 `json:"scale"`              // scale factor (1.0 = no scale)
+	Quality            int     `json:"quality"`            // output quality (1-100, default 90)
+	Format             string  `json:"format"`             // output format: "webp", "jpeg", "png" (default "webp")
+	RegenerateVariants bool    `json:"regenerateVariants"`
+	Async              bool    `json:"async"`
 }
 
 // Crop handles POST /api/v1/media/crop.
@@ -58,7 +62,16 @@ func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, 
 		}
 
 		// Crop
-		result, err := proc.CropImage(original, req.X, req.Y, req.Width, req.Height)
+		result, err := proc.CropImage(original, processing.CropOptions{
+			X:       req.X,
+			Y:       req.Y,
+			Width:   req.Width,
+			Height:  req.Height,
+			Rotate:  req.Rotate,
+			Scale:   req.Scale,
+			Quality: req.Quality,
+			Format:  req.Format,
+		})
 		if err != nil {
 			slog.Error("crop failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, model.ErrorResponse{Error: "image crop failed"})
@@ -77,14 +90,15 @@ func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, 
 		h_ := result.Height
 
 		mediaFile := &model.MediaFile{
-			ID:        uuid.New().String(),
-			ObjectKey: req.ObjectKey,
-			URL:       publicURL,
-			MimeType:  result.MimeType,
-			FileSize:  int64(len(result.Data)),
-			Width:     &w_,
-			Height:    &h_,
-			CreatedAt: time.Now(),
+			ID:         uuid.New().String(),
+			BucketName: bucket,
+			ObjectKey:  req.ObjectKey,
+			URL:        publicURL,
+			MimeType:   result.MimeType,
+			FileSize:   int64(len(result.Data)),
+			Width:      &w_,
+			Height:     &h_,
+			CreatedAt:  time.Now(),
 		}
 
 		// Regenerate variants from the cropped image

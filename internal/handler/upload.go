@@ -53,11 +53,22 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			return
 		}
 
-		// Detect MIME type from content
+		// Detect MIME type from content (magic bytes)
 		mimeType := http.DetectContentType(data)
-		// Fallback to header content type if detection gives generic result
+		// http.DetectContentType returns "application/octet-stream" for unrecognized formats
+		// (e.g. some WebP/AVIF). Trust the client Content-Type header in that case.
 		if mimeType == "application/octet-stream" && header.Header.Get("Content-Type") != "" {
 			mimeType = header.Header.Get("Content-Type")
+		}
+		// Normalize: strip params (e.g. "text/plain; charset=utf-8" → "text/plain")
+		if idx := strings.Index(mimeType, ";"); idx > 0 {
+			mimeType = strings.TrimSpace(mimeType[:idx])
+		}
+
+		// Validate file type
+		if !processing.IsAllowedMimeType(mimeType) {
+			writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: fmt.Sprintf("file type %q is not allowed", mimeType)})
+			return
 		}
 
 		// Generate object key
@@ -184,8 +195,9 @@ func PresignedUpload(cfg *config.Config, s3 *storage.S3Client) http.HandlerFunc 
 		}
 
 		writeJSON(w, http.StatusOK, model.PresignedUploadResponse{
-			UploadURL: uploadURL,
-			ObjectKey: objectKey,
+			UploadURL:  uploadURL,
+			ObjectKey:  objectKey,
+			BucketName: bucket,
 		})
 	}
 }

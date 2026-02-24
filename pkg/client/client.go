@@ -111,18 +111,25 @@ func (c *Client) Delete(objectKey, bucketName string) (*model.DeleteResponse, er
 	return &result, nil
 }
 
+// CropOptions configures the crop request.
+type CropOptions struct {
+	ObjectKey          string  `json:"objectKey"`
+	BucketName         string  `json:"bucketName"`
+	X                  int     `json:"x"`
+	Y                  int     `json:"y"`
+	Width              int     `json:"width"`
+	Height             int     `json:"height"`
+	Rotate             float64 `json:"rotate,omitempty"`
+	Scale              float64 `json:"scale,omitempty"`
+	Quality            int     `json:"quality,omitempty"`
+	Format             string  `json:"format,omitempty"`
+	RegenerateVariants bool    `json:"regenerateVariants"`
+	Async              bool    `json:"async"`
+}
+
 // Crop crops an image, replaces the original, and optionally regenerates variants.
-func (c *Client) Crop(objectKey, bucketName string, x, y, width, height int, regenerateVariants, async bool) (*model.CropResponse, error) {
-	payload, _ := json.Marshal(map[string]any{
-		"objectKey":          objectKey,
-		"bucketName":         bucketName,
-		"x":                  x,
-		"y":                  y,
-		"width":              width,
-		"height":             height,
-		"regenerateVariants": regenerateVariants,
-		"async":              async,
-	})
+func (c *Client) Crop(opts CropOptions) (*model.CropResponse, error) {
+	payload, _ := json.Marshal(opts)
 
 	req, err := http.NewRequest("POST", c.baseURL+"/api/v1/media/crop", bytes.NewReader(payload))
 	if err != nil {

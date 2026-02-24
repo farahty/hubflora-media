@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hibiken/asynq"
 
+	"github.com/farahty/hubflora-media/internal/config"
 	"github.com/farahty/hubflora-media/internal/queue"
 	"github.com/farahty/hubflora-media/internal/storage"
 )
@@ -71,7 +72,7 @@ func JobStatus(inspector *asynq.Inspector) http.HandlerFunc {
 
 // VariantRegenerate handles POST /api/v1/media/variants.
 // Triggers variant regeneration for an existing file.
-func VariantRegenerate(asynqClient *asynq.Client) http.HandlerFunc {
+func VariantRegenerate(cfg *config.Config, asynqClient *asynq.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			ObjectKey  string   `json:"objectKey"`
@@ -96,7 +97,7 @@ func VariantRegenerate(asynqClient *asynq.Client) http.HandlerFunc {
 
 		bucket := req.BucketName
 		if bucket == "" {
-			bucket = "media"
+			bucket = cfg.MinioDefaultBucket
 		}
 
 		folderPath := storage.ExtractFolderPath(req.ObjectKey)

@@ -60,21 +60,68 @@ func (p *Processor) ProcessImage(input []byte, variant ImageVariant) (*ProcessRe
 	}, nil
 }
 
-// CropImage crops the input image to the specified rectangle.
-func (p *Processor) CropImage(input []byte, x, y, width, height int) (*ProcessResult, error) {
+// CropOptions configures the crop operation.
+type CropOptions struct {
+	X       int
+	Y       int
+	Width   int
+	Height  int
+	Rotate  float64 // degrees: 0, 90, 180, 270
+	Scale   float64 // 1.0 = no scale
+	Quality int     // 1-100, 0 means default (90)
+	Format  string  // "webp", "jpeg", "png" — empty means "webp"
+}
+
+// CropImage crops the input image with optional rotation, scaling, and format.
+func (p *Processor) CropImage(input []byte, opts CropOptions) (*ProcessResult, error) {
 	img := bimg.NewImage(input)
 
-	// First extract the crop area
-	output, err := img.Process(bimg.Options{
-		AreaWidth:  width,
-		AreaHeight: height,
-		Left:       x,
-		Top:        y,
-		Type:       bimg.WEBP,
-		Quality:    90,
-	})
+	// Determine output format
+	outFormat := FormatWebP
+	switch opts.Format {
+	case "jpeg", "jpg":
+		outFormat = FormatJPEG
+	case "png":
+		outFormat = FormatPNG
+	}
+
+	quality := opts.Quality
+	if quality <= 0 {
+		quality = 90
+	}
+
+	processOpts := bimg.Options{
+		AreaWidth:  opts.Width,
+		AreaHeight: opts.Height,
+		Left:       opts.X,
+		Top:        opts.Y,
+		Type:       toBimgType(outFormat),
+		Quality:    quality,
+	}
+
+	// Apply rotation
+	if opts.Rotate != 0 {
+		processOpts.Rotate = bimg.Angle(int(opts.Rotate))
+	}
+
+	output, err := img.Process(processOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to crop image: %w", err)
+	}
+
+	// Apply scaling if needed
+	if opts.Scale > 0 && opts.Scale != 1.0 {
+		scaledWidth := int(float64(opts.Width) * opts.Scale)
+		scaledHeight := int(float64(opts.Height) * opts.Scale)
+		output, err = bimg.NewImage(output).Process(bimg.Options{
+			Width:   scaledWidth,
+			Height:  scaledHeight,
+			Type:    toBimgType(outFormat),
+			Quality: quality,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to scale cropped image: %w", err)
+		}
 	}
 
 	size, err := bimg.NewImage(output).Size()
@@ -86,8 +133,8 @@ func (p *Processor) CropImage(input []byte, x, y, width, height int) (*ProcessRe
 		Data:     output,
 		Width:    size.Width,
 		Height:   size.Height,
-		MimeType: "image/webp",
-		Format:   FormatWebP,
+		MimeType: outFormat.MimeType(),
+		Format:   outFormat,
 	}, nil
 }
 

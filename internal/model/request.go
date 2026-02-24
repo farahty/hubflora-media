@@ -27,8 +27,9 @@ type PresignedUploadRequest struct {
 
 // PresignedUploadResponse returns the pre-signed upload URL.
 type PresignedUploadResponse struct {
-	UploadURL string `json:"uploadUrl"`
-	ObjectKey string `json:"objectKey"`
+	UploadURL  string `json:"uploadUrl"`
+	ObjectKey  string `json:"objectKey"`
+	BucketName string `json:"bucketName"`
 }
 
 // CropRequest defines the crop area.

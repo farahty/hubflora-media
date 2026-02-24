@@ -111,7 +111,7 @@ func main() {
 		r.Post("/crop", handler.Crop(cfg, s3Client, proc, asynqClient))
 
 		// Variant regeneration
-		r.Post("/variants", handler.VariantRegenerate(asynqClient))
+		r.Post("/variants", handler.VariantRegenerate(cfg, asynqClient))
 		r.Get("/variants/info", handler.VariantsInfo(cfg, s3Client))
 
 		// Delete
