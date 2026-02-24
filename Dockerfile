@@ -17,13 +17,10 @@ COPY . .
 RUN CGO_ENABLED=1 go build -o /hubflora-media ./cmd/server
 
 # Runtime stage
-FROM debian:bookworm-slim
+FROM alpine:3.21
 
 # Install libvips runtime
-RUN apt-get update && apt-get install -y \
-    libvips42 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache vips ca-certificates
 
 COPY --from=builder /hubflora-media /hubflora-media
 
