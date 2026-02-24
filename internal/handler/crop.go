@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
