@@ -2,9 +2,7 @@
 FROM golang:1.24-alpine AS builder
 
 # Install libvips for bimg
-RUN apt-get update && apt-get install -y \
-    libvips-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache vips-dev gcc musl-dev
 
 WORKDIR /app
 
