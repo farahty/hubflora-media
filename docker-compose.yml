@@ -19,6 +19,8 @@ services:
       - API_KEY=${MEDIA_SERVICE_API_KEY:-changeme}
       - ALLOWED_CORS_ORIGINS=${ALLOWED_CORS_ORIGINS:-*}
       - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE:-52428800}
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
     depends_on:
       minio:
         condition: service_healthy

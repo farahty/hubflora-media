@@ -74,3 +74,42 @@ type PresignedDownloadResponse struct {
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
+
+// ListMediaRequest represents query params for GET /api/v1/media.
+type ListMediaRequest struct {
+	Limit      int    `json:"limit"`
+	Offset     int    `json:"offset"`
+	Search     string `json:"search"`
+	MimePrefix string `json:"type"`
+	SortBy     string `json:"sort"`
+	SortOrder  string `json:"order"`
+}
+
+// ListMediaResponse is the response for listing media files.
+type ListMediaResponse struct {
+	Items []MediaFileRecord `json:"items"`
+	Total int               `json:"total"`
+}
+
+// BatchGetRequest is the body for POST /api/v1/media/batch.
+type BatchGetRequest struct {
+	IDs []string `json:"ids"`
+}
+
+// BatchGetResponse is the response for batch get.
+type BatchGetResponse struct {
+	Items []MediaFileRecord `json:"items"`
+}
+
+// UpdateMediaRequest is the body for PATCH /api/v1/media/:id.
+type UpdateMediaRequest struct {
+	Alt         *string `json:"alt"`
+	Caption     *string `json:"caption"`
+	Description *string `json:"description"`
+	IsPrivate   *bool   `json:"isPrivate"`
+}
+
+// GetMediaResponse is the response for GET /api/v1/media/:id.
+type GetMediaResponse struct {
+	MediaFile MediaFileRecord `json:"mediaFile"`
+}

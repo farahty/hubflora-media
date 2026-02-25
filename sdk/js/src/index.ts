@@ -28,4 +28,9 @@ export type {
   ImageMetadata,
   UploadStatus,
   FileUploadState,
+  ListMediaOptions,
+  ListMediaResponse,
+  BatchGetResponse,
+  UpdateMediaFields,
+  GetMediaResponse,
 } from "./types.js";

@@ -1,10 +1,13 @@
 import {
   createContext,
+  createElement,
   useContext,
   useState,
   useCallback,
   useRef,
   useMemo,
+  useEffect,
+  type ReactNode,
 } from "react";
 import { HubfloraMedia } from "./client.js";
 import type {
@@ -287,4 +290,110 @@ export function useMultiUpload(
   );
 
   return { upload, files, progress, isUploading, abort, reset, remove };
+}
+
+// ── Session-Synced Provider ──
+
+export interface HubfloraMediaSessionProviderProps {
+  children: ReactNode;
+  /** Media service base URL */
+  baseUrl: string;
+  /** Function that syncs the org session and returns a fresh JWT access token */
+  getToken: () => Promise<string>;
+  /** Current organization ID — triggers re-sync when it changes */
+  organizationId: string;
+  /** Fallback UI while initializing (default: null) */
+  fallback?: ReactNode;
+}
+
+/**
+ * Provider that syncs the org session before any media operation.
+ * Ensures the JWT always has the correct org context.
+ *
+ * ```tsx
+ * <HubfloraMediaSessionProvider
+ *   baseUrl="https://media.hubflora.com"
+ *   organizationId={org.id}
+ *   getToken={async () => {
+ *     await authClient.organization.setActive({ organizationId: org.id });
+ *     const res = await authClient.$fetch("/token");
+ *     return res.data.token;
+ *   }}
+ * >
+ *   {children}
+ * </HubfloraMediaSessionProvider>
+ * ```
+ */
+export function HubfloraMediaSessionProvider({
+  children,
+  baseUrl,
+  getToken,
+  organizationId,
+  fallback = null,
+}: HubfloraMediaSessionProviderProps): ReactNode {
+  const [ready, setReady] = useState(false);
+  const tokenRef = useRef<string | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Store getToken in a ref so the useMemo closure and useEffect always
+  // access the latest version without triggering re-runs.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
+  const client = useMemo(
+    () =>
+      new HubfloraMedia({
+        baseUrl,
+        tokenProvider: async () => {
+          if (tokenRef.current) return tokenRef.current;
+          const token = await getTokenRef.current();
+          tokenRef.current = token;
+          return token;
+        },
+      }),
+    [baseUrl],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function init() {
+      try {
+        const token = await getTokenRef.current();
+        if (cancelled) return;
+        tokenRef.current = token;
+        setReady(true);
+
+        // Refresh token every 12 minutes (tokens expire in 15m)
+        refreshTimerRef.current = setInterval(async () => {
+          if (cancelled) return;
+          try {
+            const freshToken = await getTokenRef.current();
+            if (cancelled) return;
+            tokenRef.current = freshToken;
+          } catch {
+            // Silent refresh failure — next request will retry
+          }
+        }, 12 * 60 * 1000);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("HubfloraMediaSessionProvider: failed to get token", err);
+      }
+    }
+
+    setReady(false);
+    tokenRef.current = null;
+    init();
+
+    return () => {
+      cancelled = true;
+      if (refreshTimerRef.current) {
+        clearInterval(refreshTimerRef.current);
+      }
+    };
+  }, [organizationId]);
+
+  if (!ready) return fallback;
+
+  return createElement(HubfloraMediaProvider, { value: client }, children);
 }

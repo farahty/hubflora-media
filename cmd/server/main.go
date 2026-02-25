@@ -14,12 +14,14 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/farahty/hubflora-media/internal/config"
 	"github.com/farahty/hubflora-media/internal/handler"
 	"github.com/farahty/hubflora-media/internal/middleware"
 	"github.com/farahty/hubflora-media/internal/processing"
 	"github.com/farahty/hubflora-media/internal/queue"
+	"github.com/farahty/hubflora-media/internal/repository"
 	"github.com/farahty/hubflora-media/internal/storage"
 )
 
@@ -47,6 +49,25 @@ func main() {
 	// Initialize image processor
 	proc := processing.NewProcessor()
 
+	// Initialize PostgreSQL connection pool
+	dbPool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer dbPool.Close()
+
+	// Verify DB connection
+	if err := dbPool.Ping(ctx); err != nil {
+		slog.Error("failed to ping database", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("database connected")
+
+	// Initialize repositories
+	mediaRepo := repository.NewMediaRepository(dbPool)
+	variantRepo := repository.NewVariantRepository(dbPool)
+
 	// Initialize Redis/asynq
 	redisOpt, redisErr := queue.ParseRedisURL(cfg.RedisURL)
 	var asynqClient *asynq.Client
@@ -69,13 +90,17 @@ func main() {
 			Queues:      map[string]int{"default": 1},
 		})
 		mux := asynq.NewServeMux()
-		mux.Handle(queue.TypeVariantGenerate, queue.NewVariantHandler(s3Client, proc))
+		mux.Handle(queue.TypeVariantGenerate, queue.NewVariantHandler(s3Client, proc, mediaRepo, variantRepo))
 		go func() {
 			if err := asynqServer.Start(mux); err != nil {
 				slog.Error("asynq server failed", "error", err)
 			}
 		}()
 	}
+
+	// Initialize JWKS cache for JWT validation
+	jwksURL := cfg.BetterAuthURL + "/api/auth/jwks"
+	jwksCache := middleware.NewJWKSCache(jwksURL, 1*time.Hour)
 
 	// Build router
 	r := chi.NewRouter()
@@ -88,10 +113,10 @@ func main() {
 	r.Use(chimw.Timeout(60 * time.Second))
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.AllowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Media-API-Key"},
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Media-API-Key", "X-Media-User-Id", "X-Media-Org-Id", "X-Media-Org-Slug"},
 		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 
@@ -99,26 +124,26 @@ func main() {
 	r.Get("/", handler.Showcase())
 
 	// Health check (no auth)
-	r.Get("/healthz", handler.Health())
+	r.Get("/healthz", handler.Health(dbPool))
 
 	// API routes (with auth)
 	r.Route("/api/v1/media", func(r chi.Router) {
-		r.Use(middleware.APIKeyAuth(cfg.APIKey))
+		r.Use(middleware.DualAuth(cfg.APIKey, jwksCache, cfg.BetterAuthURL))
 
 		// Upload
 		uploadLimiter := middleware.NewRateLimiter(30, time.Minute)
-		r.With(uploadLimiter.Middleware).Post("/upload", handler.Upload(cfg, s3Client, proc, asynqClient))
+		r.With(uploadLimiter.Middleware).Post("/upload", handler.Upload(cfg, s3Client, proc, asynqClient, mediaRepo, variantRepo))
 		r.Post("/upload/presigned", handler.PresignedUpload(cfg, s3Client))
 
 		// Crop (replaces original + optionally regenerates variants)
-		r.Post("/crop", handler.Crop(cfg, s3Client, proc, asynqClient))
+		r.Post("/crop", handler.Crop(cfg, s3Client, proc, asynqClient, mediaRepo, variantRepo))
 
 		// Variant regeneration
 		r.Post("/variants", handler.VariantRegenerate(cfg, asynqClient))
 		r.Get("/variants/info", handler.VariantsInfo(cfg, s3Client))
 
 		// Delete
-		r.Delete("/", handler.Delete(cfg, s3Client))
+		r.Delete("/", handler.Delete(cfg, s3Client, mediaRepo, variantRepo))
 
 		// Presign download
 		r.Get("/presign", handler.Presign(cfg, s3Client))
@@ -131,6 +156,15 @@ func main() {
 
 		// Job status (async task polling)
 		r.Get("/job/{jobId}", handler.JobStatus(asynqInspector))
+
+		// New Phase 2 endpoints
+		r.Get("/list", handler.ListMedia(mediaRepo))
+		r.Post("/batch", handler.BatchGetMedia(mediaRepo, variantRepo))
+		r.Route("/{id}", func(r chi.Router) {
+			r.Get("/", handler.GetMedia(mediaRepo, variantRepo))
+			r.Patch("/", handler.UpdateMedia(mediaRepo))
+			r.Get("/variants", handler.GetMediaVariants(variantRepo))
+		})
 	})
 
 	// Start HTTP server

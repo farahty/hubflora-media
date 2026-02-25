@@ -14,15 +14,17 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/farahty/hubflora-media/internal/config"
+	"github.com/farahty/hubflora-media/internal/middleware"
 	"github.com/farahty/hubflora-media/internal/model"
 	"github.com/farahty/hubflora-media/internal/processing"
 	"github.com/farahty/hubflora-media/internal/queue"
+	"github.com/farahty/hubflora-media/internal/repository"
 	"github.com/farahty/hubflora-media/internal/storage"
 )
 
 // Upload handles POST /api/v1/media/upload.
 // Accepts multipart/form-data with a "file" field and optional form values.
-func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, asynqClient *asynq.Client) http.HandlerFunc {
+func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, asynqClient *asynq.Client, mediaRepo *repository.MediaRepository, variantRepo *repository.VariantRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse multipart form with max upload size
 		if err := r.ParseMultipartForm(cfg.MaxUploadSize); err != nil {
@@ -37,7 +39,14 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 		}
 		defer file.Close()
 
+		// Get auth context
+		authCtx := middleware.MustGetAuthContext(r)
+
+		// orgSlug from form takes priority, then from auth context (JWT)
 		orgSlug := r.FormValue("orgSlug")
+		if orgSlug == "" {
+			orgSlug = authCtx.OrgSlug
+		}
 		if orgSlug == "" {
 			writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "orgSlug is required"})
 			return
@@ -93,7 +102,8 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 
 		publicURL := s3.GetPublicURL(bucket, objectKey)
 
-		mediaFile := &model.MediaFile{
+		now := time.Now()
+		record := &model.MediaFileRecord{
 			ID:               uuid.New().String(),
 			Filename:         storage.GenerateFileFolderName(originalFilename),
 			OriginalFilename: originalFilename,
@@ -102,7 +112,21 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			BucketName:       bucket,
 			ObjectKey:        objectKey,
 			URL:              publicURL,
-			CreatedAt:        time.Now(),
+			OrganizationID:   &authCtx.OrganizationID,
+			UploadedBy:       authCtx.UserID,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		}
+
+		// Set alt/caption/description from form
+		if alt := r.FormValue("alt"); alt != "" {
+			record.Alt = &alt
+		}
+		if caption := r.FormValue("caption"); caption != "" {
+			record.Caption = &caption
+		}
+		if description := r.FormValue("description"); description != "" {
+			record.Description = &description
 		}
 
 		// Extract image metadata
@@ -111,9 +135,9 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			if err == nil {
 				imgW := meta.Width
 				imgH := meta.Height
-				mediaFile.Width = &imgW
-				mediaFile.Height = &imgH
-				mediaFile.Metadata = map[string]any{
+				record.Width = &imgW
+				record.Height = &imgH
+				record.Metadata = map[string]any{
 					"format":      meta.Format,
 					"space":       meta.Space,
 					"channels":    meta.Channels,
@@ -122,11 +146,17 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			}
 		}
 
+		// Persist to DB
+		if err := mediaRepo.Create(r.Context(), record); err != nil {
+			slog.Error("failed to insert media_files record", "error", err)
+			writeJSON(w, http.StatusInternalServerError, model.ErrorResponse{Error: "failed to persist media record"})
+			return
+		}
+
 		// Generate variants
 		if generateVariants && processing.IsImageMimeType(mimeType) {
 			if async && asynqClient != nil {
-				// Queue async variant generation — stores S3 reference, not file bytes
-				task, err := queue.NewVariantTask(mediaFile.ID, bucket, folderPath, objectKey)
+				task, err := queue.NewVariantTask(record.ID, bucket, folderPath, objectKey)
 				if err == nil {
 					info, err := asynqClient.Enqueue(task, asynq.MaxRetry(3), asynq.Timeout(5*time.Minute))
 					if err != nil {
@@ -134,7 +164,7 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 					} else {
 						writeJSON(w, http.StatusAccepted, model.UploadResponse{
 							Success:   true,
-							MediaFile: mediaFile,
+							MediaFile: record.ToMediaFile(),
 							JobID:     info.ID,
 						})
 						return
@@ -144,21 +174,28 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 
 			// Sync variant generation
 			variants := queue.ProcessVariants(r.Context(), s3, proc, data, bucket, folderPath)
-			mediaFile.Variants = variants
 			if len(variants) > 0 {
+				variantRecords := repository.ToRecords(record.ID, variants)
+				if err := variantRepo.CreateBatch(r.Context(), variantRecords); err != nil {
+					slog.Warn("failed to persist variant records", "error", err)
+				}
+
 				for _, v := range variants {
 					if v.Name == "thumbnail" {
 						thumbURL := v.URL
-						mediaFile.ThumbnailURL = &thumbURL
+						record.ThumbnailURL = &thumbURL
+						mediaRepo.Update(r.Context(), record.ID, authCtx.OrganizationID,
+							repository.UpdateFields{ThumbnailURL: &thumbURL})
 						break
 					}
 				}
+				record.Variants = variantRecords
 			}
 		}
 
 		writeJSON(w, http.StatusOK, model.UploadResponse{
 			Success:   true,
-			MediaFile: mediaFile,
+			MediaFile: record.ToMediaFile(),
 		})
 	}
 }
