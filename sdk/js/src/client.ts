@@ -21,6 +21,11 @@ import type {
   VariantRedirectOptions,
   JobStatusResponse,
   HealthResponse,
+  ListMediaOptions,
+  ListMediaResponse,
+  BatchGetResponse,
+  UpdateMediaFields,
+  GetMediaResponse,
 } from "./types.js";
 
 export class HubfloraMediaError extends Error {
@@ -35,19 +40,32 @@ export class HubfloraMediaError extends Error {
 
 export class HubfloraMedia {
   private baseUrl: string;
-  private apiKey: string;
+  private apiKey?: string;
+  private tokenProvider?: () => Promise<string> | string;
   private _fetch: typeof globalThis.fetch;
 
   constructor(config: HubfloraMediaConfig) {
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.apiKey = config.apiKey;
+    this.tokenProvider = config.tokenProvider;
     this._fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
+
+    if (!this.apiKey && !this.tokenProvider) {
+      throw new Error("HubfloraMedia: either apiKey or tokenProvider is required");
+    }
   }
 
   // ── Internal helpers ──
 
-  private headers(extra?: Record<string, string>): Record<string, string> {
-    return { "X-Media-API-Key": this.apiKey, ...extra };
+  private async authHeaders(): Promise<Record<string, string>> {
+    if (this.tokenProvider) {
+      const token = await this.tokenProvider();
+      return { Authorization: `Bearer ${token}` };
+    }
+    if (this.apiKey) {
+      return { "X-Media-API-Key": this.apiKey };
+    }
+    throw new Error("HubfloraMedia: no auth configured");
   }
 
   private async request<T>(
@@ -55,9 +73,10 @@ export class HubfloraMedia {
     path: string,
     opts?: { headers?: Record<string, string>; body?: BodyInit },
   ): Promise<T> {
+    const auth = await this.authHeaders();
     const res = await this._fetch(`${this.baseUrl}${path}`, {
       method,
-      headers: this.headers(opts?.headers),
+      headers: { ...auth, ...opts?.headers },
       body: opts?.body,
     });
 
@@ -84,7 +103,7 @@ export class HubfloraMedia {
   private buildUploadFormData(opts: UploadOptions): FormData {
     const fd = new FormData();
     fd.append("file", opts.file);
-    fd.append("orgSlug", opts.orgSlug);
+    if (opts.orgSlug) fd.append("orgSlug", opts.orgSlug);
     if (opts.generateVariants !== undefined)
       fd.append("generateVariants", String(opts.generateVariants));
     if (opts.async !== undefined) fd.append("async", String(opts.async));
@@ -115,13 +134,16 @@ export class HubfloraMedia {
    * Upload a file with real-time progress tracking.
    * Uses XMLHttpRequest internally since fetch doesn't support upload progress.
    */
-  uploadWithProgress(opts: UploadWithProgressOptions): Promise<UploadResponse> {
+  async uploadWithProgress(opts: UploadWithProgressOptions): Promise<UploadResponse> {
+    const auth = await this.authHeaders();
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const url = `${this.baseUrl}/api/v1/media/upload`;
 
       xhr.open("POST", url);
-      xhr.setRequestHeader("X-Media-API-Key", this.apiKey);
+      for (const [key, value] of Object.entries(auth)) {
+        xhr.setRequestHeader(key, value);
+      }
 
       // Handle abort
       if (opts.signal) {
@@ -260,9 +282,10 @@ export class HubfloraMedia {
   /** Get a redirect URL to a specific variant by name. */
   async variantUrl(opts: VariantRedirectOptions): Promise<string> {
     const path = `/api/v1/media/variant/${opts.bucket}/${opts.variantName}/${opts.path}`;
+    const auth = await this.authHeaders();
     const res = await this._fetch(`${this.baseUrl}${path}`, {
       method: "GET",
-      headers: this.headers(),
+      headers: auth,
       redirect: "manual",
     });
 
@@ -301,9 +324,10 @@ export class HubfloraMedia {
   /** Download a file as a Blob (proxied through the media service). */
   async download(opts: DownloadOptions): Promise<Blob> {
     const path = `/api/v1/media/download/${opts.bucket}/${opts.objectKey}`;
+    const auth = await this.authHeaders();
     const res = await this._fetch(`${this.baseUrl}${path}`, {
       method: "GET",
-      headers: this.headers(),
+      headers: auth,
     });
 
     if (!res.ok) {
@@ -343,5 +367,39 @@ export class HubfloraMedia {
 
       await new Promise((r) => setTimeout(r, intervalMs));
     }
+  }
+
+  /** Get a single media file by ID */
+  async get(id: string): Promise<GetMediaResponse> {
+    return this.request<GetMediaResponse>("GET", `/api/v1/media/${id}`);
+  }
+
+  /** List media files for the authenticated org */
+  async list(opts?: ListMediaOptions): Promise<ListMediaResponse> {
+    const query = this.qs({
+      limit: opts?.limit,
+      offset: opts?.offset,
+      search: opts?.search,
+      type: opts?.type,
+      sort: opts?.sort,
+      order: opts?.order,
+    });
+    return this.request<ListMediaResponse>("GET", `/api/v1/media/list${query}`);
+  }
+
+  /** Get multiple media files by IDs */
+  async batchGet(ids: string[]): Promise<BatchGetResponse> {
+    return this.request<BatchGetResponse>("POST", "/api/v1/media/batch", {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+  }
+
+  /** Update media metadata */
+  async update(id: string, fields: UpdateMediaFields): Promise<GetMediaResponse> {
+    return this.request<GetMediaResponse>("PATCH", `/api/v1/media/${id}`, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
   }
 }

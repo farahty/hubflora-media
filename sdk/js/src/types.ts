@@ -2,7 +2,7 @@
 
 export interface UploadOptions {
   file: File | Blob;
-  orgSlug: string;
+  orgSlug?: string;
   generateVariants?: boolean;
   async?: boolean;
   alt?: string;
@@ -107,13 +107,21 @@ export interface MediaFile {
   fileSize: number;
   width?: number;
   height?: number;
+  duration?: number;
   bucketName: string;
   objectKey: string;
   url: string;
   thumbnailUrl?: string;
-  metadata?: ImageMetadata;
+  alt?: string;
+  caption?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  isPrivate?: boolean;
+  organizationId?: string;
+  uploadedBy?: string;
   variants?: MediaVariant[];
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ImageMetadata {
@@ -192,13 +200,44 @@ export interface HealthResponse {
   status: string;
 }
 
+export interface ListMediaOptions {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  type?: "image" | "video" | "audio" | "document";
+  sort?: "created_at" | "file_size" | "filename";
+  order?: "asc" | "desc";
+}
+
+export interface ListMediaResponse {
+  items: MediaFile[];
+  total: number;
+}
+
+export interface BatchGetResponse {
+  items: MediaFile[];
+}
+
+export interface UpdateMediaFields {
+  alt?: string;
+  caption?: string;
+  description?: string;
+  isPrivate?: boolean;
+}
+
+export interface GetMediaResponse {
+  mediaFile: MediaFile;
+}
+
 // ── Client config ──
 
 export interface HubfloraMediaConfig {
   /** Base URL of the media service (e.g. "https://media.hubflora.com") */
   baseUrl: string;
-  /** API key sent as X-Media-API-Key header */
-  apiKey: string;
+  /** API key for server-to-server auth (optional if using tokenProvider) */
+  apiKey?: string;
+  /** Token provider for browser auth — called before each request */
+  tokenProvider?: () => Promise<string> | string;
   /** Custom fetch implementation (defaults to globalThis.fetch) */
   fetch?: typeof globalThis.fetch;
 }
