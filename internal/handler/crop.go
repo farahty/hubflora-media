@@ -10,6 +10,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/farahty/hubflora-media/internal/config"
+	"github.com/farahty/hubflora-media/internal/middleware"
 	"github.com/farahty/hubflora-media/internal/model"
 	"github.com/farahty/hubflora-media/internal/processing"
 	"github.com/farahty/hubflora-media/internal/queue"
@@ -47,6 +48,8 @@ func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, 
 			writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "objectKey, width, and height are required"})
 			return
 		}
+
+		authCtx := middleware.MustGetAuthContext(r)
 
 		bucket := req.BucketName
 		if bucket == "" {
@@ -86,8 +89,8 @@ func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, 
 		}
 
 		publicURL := s3.GetPublicURL(bucket, req.ObjectKey)
-		w_ := result.Width
-		h_ := result.Height
+		imgW := result.Width
+		imgH := result.Height
 
 		mediaFile := &model.MediaFile{
 			ID:         uuid.New().String(),
@@ -96,9 +99,22 @@ func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, 
 			URL:        publicURL,
 			MimeType:   result.MimeType,
 			FileSize:   int64(len(result.Data)),
-			Width:      &w_,
-			Height:     &h_,
+			Width:      &imgW,
+			Height:     &imgH,
 			CreatedAt:  time.Now(),
+		}
+
+		// Update DB record if it exists
+		record, dbErr := mediaRepo.GetByObjectKey(r.Context(), req.ObjectKey, authCtx.OrganizationID)
+		if dbErr == nil && record != nil {
+			fileSize := int64(len(result.Data))
+			mediaRepo.Update(r.Context(), record.ID, authCtx.OrganizationID, repository.UpdateFields{
+				Width:    &imgW,
+				Height:   &imgH,
+				FileSize: &fileSize,
+				MimeType: &result.MimeType,
+			})
+			mediaFile.ID = record.ID
 		}
 
 		// Regenerate variants from the cropped image
@@ -124,11 +140,23 @@ func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, 
 			// Sync variant regeneration
 			variants := queue.ProcessVariants(r.Context(), s3, proc, result.Data, bucket, folderPath)
 			mediaFile.Variants = variants
+
 			if len(variants) > 0 {
+				// Persist variants to DB if we have a record
+				if record != nil {
+					variantRepo.DeleteByMediaFileID(r.Context(), record.ID)
+					variantRecords := repository.ToRecords(record.ID, variants)
+					variantRepo.CreateBatch(r.Context(), variantRecords)
+				}
+
 				for _, v := range variants {
 					if v.Name == "thumbnail" {
 						thumbURL := v.URL
 						mediaFile.ThumbnailURL = &thumbURL
+						if record != nil {
+							mediaRepo.Update(r.Context(), record.ID, authCtx.OrganizationID,
+								repository.UpdateFields{ThumbnailURL: &thumbURL})
+						}
 						break
 					}
 				}

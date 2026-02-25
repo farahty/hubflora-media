@@ -90,7 +90,7 @@ func main() {
 			Queues:      map[string]int{"default": 1},
 		})
 		mux := asynq.NewServeMux()
-		mux.Handle(queue.TypeVariantGenerate, queue.NewVariantHandler(s3Client, proc))
+		mux.Handle(queue.TypeVariantGenerate, queue.NewVariantHandler(s3Client, proc, mediaRepo, variantRepo))
 		go func() {
 			if err := asynqServer.Start(mux); err != nil {
 				slog.Error("asynq server failed", "error", err)

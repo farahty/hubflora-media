@@ -11,6 +11,7 @@ import (
 
 	"github.com/farahty/hubflora-media/internal/model"
 	"github.com/farahty/hubflora-media/internal/processing"
+	"github.com/farahty/hubflora-media/internal/repository"
 	"github.com/farahty/hubflora-media/internal/storage"
 )
 
@@ -42,13 +43,15 @@ func NewVariantTask(mediaID, bucket, folderPath, objectKey string) (*asynq.Task,
 
 // VariantHandler processes async variant generation tasks.
 type VariantHandler struct {
-	s3   *storage.S3Client
-	proc *processing.Processor
+	s3          *storage.S3Client
+	proc        *processing.Processor
+	mediaRepo   *repository.MediaRepository
+	variantRepo *repository.VariantRepository
 }
 
 // NewVariantHandler creates a new handler for variant tasks.
-func NewVariantHandler(s3 *storage.S3Client, proc *processing.Processor) *VariantHandler {
-	return &VariantHandler{s3: s3, proc: proc}
+func NewVariantHandler(s3 *storage.S3Client, proc *processing.Processor, mediaRepo *repository.MediaRepository, variantRepo *repository.VariantRepository) *VariantHandler {
+	return &VariantHandler{s3: s3, proc: proc, mediaRepo: mediaRepo, variantRepo: variantRepo}
 }
 
 // ProcessTask implements the asynq.Handler interface.
@@ -67,6 +70,23 @@ func (h *VariantHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	variants := ProcessVariants(ctx, h.s3, h.proc, data, payload.BucketName, payload.FolderPath)
+
+	// Persist variants to DB
+	if len(variants) > 0 {
+		variantRecords := repository.ToRecords(payload.MediaID, variants)
+		if err := h.variantRepo.CreateBatch(ctx, variantRecords); err != nil {
+			slog.Warn("failed to persist async variant records", "error", err)
+		}
+
+		// Update thumbnail URL on the media file
+		for _, v := range variants {
+			if v.Name == "thumbnail" {
+				thumbURL := v.URL
+				h.mediaRepo.UpdateThumbnail(ctx, payload.MediaID, thumbURL)
+				break
+			}
+		}
+	}
 
 	slog.Info("variant generation complete", "mediaId", payload.MediaID, "count", len(variants))
 	return nil

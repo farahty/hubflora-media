@@ -288,3 +288,10 @@ func collectMediaFiles(rows pgx.Rows) ([]model.MediaFileRecord, error) {
 	}
 	return files, rows.Err()
 }
+
+// UpdateThumbnail sets the thumbnail URL without org scoping (for internal worker use).
+func (r *MediaRepository) UpdateThumbnail(ctx context.Context, id string, thumbnailURL string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE media_files SET thumbnail_url = $1, updated_at = $2 WHERE id = $3`,
+		thumbnailURL, time.Now(), id)
+	return err
+}
