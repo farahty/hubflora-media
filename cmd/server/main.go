@@ -113,10 +113,10 @@ func main() {
 	r.Use(chimw.Timeout(60 * time.Second))
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.AllowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Media-API-Key", "X-Media-User-Id", "X-Media-Org-Id", "X-Media-Org-Slug"},
 		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 
