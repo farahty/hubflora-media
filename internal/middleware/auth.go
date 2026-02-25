@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,7 +20,6 @@ const apiKeyHeader = "X-Media-API-Key"
 
 // MediaClaims holds the custom claims we extract from JWT tokens.
 type MediaClaims struct {
-	Sub     string `json:"sub"`
 	OrgID   string `json:"orgId"`
 	OrgSlug string `json:"orgSlug"`
 }
@@ -177,12 +177,17 @@ func DualAuth(apiKey string, jwksCache *JWKSCache, betterAuthURL string) func(ht
 
 			// --- attempt API key ---
 			if key := r.Header.Get(apiKeyHeader); key != "" {
-				if key != apiKey {
+				if subtle.ConstantTimeCompare([]byte(key), []byte(apiKey)) != 1 {
 					http.Error(w, `{"error":"invalid API key"}`, http.StatusUnauthorized)
 					return
 				}
+				userID := r.Header.Get("X-Media-User-Id")
+				if userID == "" {
+					http.Error(w, `{"error":"X-Media-User-Id header is required"}`, http.StatusBadRequest)
+					return
+				}
 				ac := &AuthContext{
-					UserID:         r.Header.Get("X-Media-User-Id"),
+					UserID:         userID,
 					OrganizationID: r.Header.Get("X-Media-Org-Id"),
 					OrgSlug:        r.Header.Get("X-Media-Org-Slug"),
 					AuthMethod:     "apikey",
@@ -261,7 +266,7 @@ func validateJWT(ctx context.Context, raw string, cache *JWKSCache, betterAuthUR
 	}
 
 	return &AuthContext{
-		UserID:         custom.Sub,
+		UserID:         claims.Subject,
 		OrganizationID: custom.OrgID,
 		OrgSlug:        custom.OrgSlug,
 		AuthMethod:     "jwt",
@@ -281,7 +286,7 @@ func APIKeyAuth(apiKey string) func(http.Handler) http.Handler {
 				http.Error(w, `{"error":"missing API key"}`, http.StatusUnauthorized)
 				return
 			}
-			if key != apiKey {
+			if subtle.ConstantTimeCompare([]byte(key), []byte(apiKey)) != 1 {
 				http.Error(w, `{"error":"invalid API key"}`, http.StatusUnauthorized)
 				return
 			}
