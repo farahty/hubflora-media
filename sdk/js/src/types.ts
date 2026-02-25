@@ -116,12 +116,12 @@ export interface MediaFile {
   caption?: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  isPrivate?: boolean;
+  isPrivate: boolean;
   organizationId?: string;
   uploadedBy?: string;
   variants?: MediaVariant[];
   createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
 }
 
 export interface ImageMetadata {
