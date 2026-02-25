@@ -330,10 +330,15 @@ export function HubfloraMediaSessionProvider({
   getToken,
   organizationId,
   fallback = null,
-}: HubfloraMediaSessionProviderProps) {
+}: HubfloraMediaSessionProviderProps): ReactNode {
   const [ready, setReady] = useState(false);
   const tokenRef = useRef<string | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Store getToken in a ref so the useMemo closure and useEffect always
+  // access the latest version without triggering re-runs.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
   const client = useMemo(
     () =>
@@ -341,7 +346,7 @@ export function HubfloraMediaSessionProvider({
         baseUrl,
         tokenProvider: async () => {
           if (tokenRef.current) return tokenRef.current;
-          const token = await getToken();
+          const token = await getTokenRef.current();
           tokenRef.current = token;
           return token;
         },
@@ -354,21 +359,24 @@ export function HubfloraMediaSessionProvider({
 
     async function init() {
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (cancelled) return;
         tokenRef.current = token;
         setReady(true);
 
         // Refresh token every 12 minutes (tokens expire in 15m)
         refreshTimerRef.current = setInterval(async () => {
+          if (cancelled) return;
           try {
-            const freshToken = await getToken();
+            const freshToken = await getTokenRef.current();
+            if (cancelled) return;
             tokenRef.current = freshToken;
           } catch {
             // Silent refresh failure — next request will retry
           }
         }, 12 * 60 * 1000);
       } catch (err) {
+        if (cancelled) return;
         console.error("HubfloraMediaSessionProvider: failed to get token", err);
       }
     }
@@ -383,9 +391,9 @@ export function HubfloraMediaSessionProvider({
         clearInterval(refreshTimerRef.current);
       }
     };
-  }, [organizationId, getToken]);
+  }, [organizationId]);
 
-  if (!ready) return fallback as any;
+  if (!ready) return fallback;
 
   return createElement(HubfloraMediaProvider, { value: client }, children);
 }
