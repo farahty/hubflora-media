@@ -31,6 +31,12 @@ type Config struct {
 
 	// Processing
 	MaxUploadSize int64 // bytes
+
+	// Database (shared with traveler-aggregator)
+	DatabaseURL string
+
+	// JWT Auth (JWKS endpoint: {BetterAuthURL}/api/auth/jwks)
+	BetterAuthURL string
 }
 
 func Load() (*Config, error) {
@@ -56,6 +62,9 @@ func Load() (*Config, error) {
 		AllowedOrigins: strings.Split(envStr("ALLOWED_CORS_ORIGINS", "*"), ","),
 
 		MaxUploadSize: envInt64("MAX_UPLOAD_SIZE", 50*1024*1024), // 50MB
+
+		DatabaseURL:   envStr("DATABASE_URL", ""),
+		BetterAuthURL: envStr("BETTER_AUTH_URL", ""),
 	}
 
 	if cfg.MinioAccessKey == "" || cfg.MinioSecretKey == "" {
@@ -64,6 +73,14 @@ func Load() (*Config, error) {
 
 	if cfg.APIKey == "" {
 		return nil, fmt.Errorf("MEDIA_SERVICE_API_KEY is required")
+	}
+
+	if cfg.DatabaseURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+
+	if cfg.BetterAuthURL == "" {
+		return nil, fmt.Errorf("BETTER_AUTH_URL is required")
 	}
 
 	return cfg, nil
