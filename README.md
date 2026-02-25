@@ -21,7 +21,12 @@ The service starts on `https://media.hubflora.com`.
 | `POST` | `/api/v1/media/upload` | Upload file (multipart) with optional variant generation |
 | `POST` | `/api/v1/media/upload/presigned` | Get pre-signed upload URL |
 | `POST` | `/api/v1/media/crop` | Crop an image |
-| `DELETE` | `/api/v1/media` | Delete file + variants |
+| `DELETE` | `/api/v1/media` | Delete file + variants (by `id` or `objectKey`) |
+| `GET` | `/api/v1/media/list` | List media files (paginated, searchable) |
+| `GET` | `/api/v1/media/{id}` | Get a single media file by ID |
+| `POST` | `/api/v1/media/batch` | Get multiple media files by IDs |
+| `PATCH` | `/api/v1/media/{id}` | Update media metadata (alt, caption, etc.) |
+| `GET` | `/api/v1/media/{id}/variants` | Get variants for a media file |
 | `GET` | `/api/v1/media/presign?objectKey=...` | Get pre-signed download URL |
 | `GET` | `/api/v1/media/download/{bucket}/*` | Stream file download |
 | `GET` | `/api/v1/media/variant/{bucket}/{name}/*` | Redirect to variant URL |
@@ -29,7 +34,14 @@ The service starts on `https://media.hubflora.com`.
 
 ## Authentication
 
-All `/api/v1/*` routes require `X-Media-API-Key` header matching the `MEDIA_SERVICE_API_KEY` env var.
+All `/api/v1/*` routes support two authentication methods:
+
+| Method | Header | Use case |
+|--------|--------|----------|
+| **API key** | `X-Media-API-Key: <key>` | Server-to-server (e.g. from traveler-aggregator) |
+| **JWT (Bearer)** | `Authorization: Bearer <token>` | Browser clients via Better Auth |
+
+JWT tokens are validated against the Better Auth JWKS endpoint. The token must include `activeOrganizationId` and `orgSlug` claims.
 
 ## Environment Variables
 
@@ -48,6 +60,8 @@ All `/api/v1/*` routes require `X-Media-API-Key` header matching the `MEDIA_SERV
 | `MEDIA_SERVICE_API_KEY` | — | Shared API key (required) |
 | `ALLOWED_CORS_ORIGINS` | `*` | Comma-separated CORS origins |
 | `MAX_UPLOAD_SIZE` | `52428800` | Max upload size in bytes (50MB) |
+| `DATABASE_URL` | — | PostgreSQL connection string (required) |
+| `BETTER_AUTH_URL` | — | Better Auth base URL for JWKS validation (required) |
 
 ## API Examples
 
@@ -92,14 +106,21 @@ Response (`200` sync / `202` async):
     "objectKey": "my-org/20240101-120000/photo.jpg",
     "url": "https://media.hubflora.com/my-org/20240101-120000/photo.jpg",
     "thumbnailUrl": "https://media.hubflora.com/my-org/20240101-120000/thumbnail.webp",
+    "alt": "A sunset photo",
+    "caption": "Sunset",
+    "description": "Beautiful sunset over the ocean",
     "metadata": {
       "format": "jpeg",
       "space": "srgb",
       "channels": 3,
       "orientation": 1
     },
+    "isPrivate": false,
+    "organizationId": "org-uuid-here",
+    "uploadedBy": "user-uuid-here",
     "variants": [],
-    "createdAt": "2024-01-01T12:00:00Z"
+    "createdAt": "2024-01-01T12:00:00Z",
+    "updatedAt": "2024-01-01T12:00:00Z"
   },
   "jobId": "job-uuid-here"
 }
@@ -199,18 +220,107 @@ Response:
 
 ### Delete Media
 
+By ID:
 ```bash
 curl -X DELETE https://media.hubflora.com/api/v1/media/ \
   -H "X-Media-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
-  -d '{
-    "objectKey": "my-org/20240101-120000/photo.jpg"
-  }'
+  -d '{ "id": "550e8400-e29b-41d4-a716-446655440000" }'
+```
+
+By object key:
+```bash
+curl -X DELETE https://media.hubflora.com/api/v1/media/ \
+  -H "X-Media-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{ "objectKey": "my-org/20240101-120000/photo.jpg" }'
 ```
 
 Response:
 ```json
 { "success": true }
+```
+
+### List Media
+
+```bash
+curl "https://media.hubflora.com/api/v1/media/list?limit=20&offset=0&sort=created_at&order=desc" \
+  -H "X-Media-API-Key: your-api-key"
+```
+
+Response:
+```json
+{
+  "items": [{ "id": "...", "filename": "...", "url": "...", "..." : "..." }],
+  "total": 42
+}
+```
+
+### Get Media
+
+```bash
+curl https://media.hubflora.com/api/v1/media/550e8400-e29b-41d4-a716-446655440000 \
+  -H "X-Media-API-Key: your-api-key"
+```
+
+Response:
+```json
+{
+  "mediaFile": { "id": "550e8400-...", "filename": "...", "url": "...", "variants": [...], "..." : "..." }
+}
+```
+
+### Batch Get Media
+
+```bash
+curl -X POST https://media.hubflora.com/api/v1/media/batch \
+  -H "X-Media-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{ "ids": ["id-1", "id-2", "id-3"] }'
+```
+
+Response:
+```json
+{
+  "items": [{ "id": "id-1", "..." : "..." }, { "id": "id-2", "..." : "..." }]
+}
+```
+
+### Update Media
+
+```bash
+curl -X PATCH https://media.hubflora.com/api/v1/media/550e8400-e29b-41d4-a716-446655440000 \
+  -H "X-Media-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "alt": "Updated alt text",
+    "caption": "New caption",
+    "description": "Updated description",
+    "isPrivate": false
+  }'
+```
+
+Response:
+```json
+{
+  "mediaFile": { "id": "550e8400-...", "alt": "Updated alt text", "..." : "..." }
+}
+```
+
+### Get Media Variants
+
+```bash
+curl https://media.hubflora.com/api/v1/media/550e8400-e29b-41d4-a716-446655440000/variants \
+  -H "X-Media-API-Key: your-api-key"
+```
+
+Response:
+```json
+{
+  "variants": [
+    { "name": "thumbnail", "width": 400, "height": 300, "url": "...", "mimeType": "image/webp" }
+  ]
+}
 ```
 
 ### Presign Download URL

@@ -64,6 +64,7 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
 .method.get{color:var(--method-get);background:rgba(34,214,122,.1);border:1px solid rgba(34,214,122,.2)}
 .method.post{color:var(--method-post);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2)}
 .method.delete{color:var(--method-delete);background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2)}
+.method.patch{color:var(--orange);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2)}
 .ep-path{font-family:var(--mono);font-size:13px;color:var(--text-bright);flex:1}
 .ep-path .param{color:var(--orange)}
 .ep-desc{font-size:12px;color:var(--text-dim);margin-right:.5rem}
@@ -308,6 +309,209 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
           </button>
         </div>
         <div class="response-panel" id="res-presigned-upload" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Query -->
+    <div class="section-label">Query</div>
+
+    <div class="endpoint" data-id="get-media">
+      <div class="ep-header" onclick="toggle('get-media')">
+        <span class="method get">GET</span>
+        <span class="ep-path">/api/v1/media/<span class="param">{id}</span></span>
+        <span class="ep-desc">Get media file by ID</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Fetch a single media file with all its metadata and variants.
+          <ul>
+            <li>Media detail pages or editors</li>
+            <li>Loading full file info including variants after an upload</li>
+          </ul>
+        </div>
+        <div class="form-grid single">
+          <div class="form-group">
+            <div class="form-label">id <span class="req">*</span></div>
+            <input type="text" class="form-input" id="getmedia-id" placeholder="550e8400-e29b-41d4-a716-446655440000">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendGetMedia(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-get-media" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="endpoint" data-id="list-media">
+      <div class="ep-header" onclick="toggle('list-media')">
+        <span class="method get">GET</span>
+        <span class="ep-path">/api/v1/media/list</span>
+        <span class="ep-desc">List media files (paginated)</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Browse and search media files for the authenticated organization.
+          <ul>
+            <li>Media library / gallery views</li>
+            <li>Search by filename or filter by MIME type prefix</li>
+            <li>Paginated results with total count</li>
+          </ul>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <div class="form-label">limit</div>
+            <input type="number" class="form-input" id="list-limit" placeholder="20" value="20">
+          </div>
+          <div class="form-group">
+            <div class="form-label">offset</div>
+            <input type="number" class="form-input" id="list-offset" placeholder="0" value="0">
+          </div>
+          <div class="form-group">
+            <div class="form-label">search</div>
+            <input type="text" class="form-input" id="list-search" placeholder="filename search...">
+          </div>
+          <div class="form-group">
+            <div class="form-label">type</div>
+            <select class="form-select" id="list-type">
+              <option value="">All types</option>
+              <option value="image">image</option>
+              <option value="video">video</option>
+              <option value="audio">audio</option>
+              <option value="document">document</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <div class="form-label">sort</div>
+            <select class="form-select" id="list-sort">
+              <option value="created_at">created_at</option>
+              <option value="file_size">file_size</option>
+              <option value="filename">filename</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <div class="form-label">order</div>
+            <select class="form-select" id="list-order">
+              <option value="desc">desc</option>
+              <option value="asc">asc</option>
+            </select>
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendListMedia(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-list-media" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="endpoint" data-id="batch-media">
+      <div class="ep-header" onclick="toggle('batch-media')">
+        <span class="method post">POST</span>
+        <span class="ep-path">/api/v1/media/batch</span>
+        <span class="ep-desc">Get multiple media files by IDs</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Fetch multiple media files in a single request (max 100 IDs).
+          <ul>
+            <li>Loading media for a page with multiple images</li>
+            <li>Resolving media references from a CMS or content store</li>
+          </ul>
+        </div>
+        <div class="form-grid single">
+          <div class="form-group">
+            <div class="form-label">ids <span class="req">*</span> <span style="font-size:10px;color:var(--text-dim)">(comma-separated)</span></div>
+            <input type="text" class="form-input" id="batch-ids" placeholder="id-1, id-2, id-3">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendBatchMedia(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-batch-media" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="endpoint" data-id="update-media">
+      <div class="ep-header" onclick="toggle('update-media')">
+        <span class="method patch">PATCH</span>
+        <span class="ep-path">/api/v1/media/<span class="param">{id}</span></span>
+        <span class="ep-desc">Update media metadata</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Update metadata fields on an existing media file.
+          <ul>
+            <li>Edit alt text, captions, or descriptions after upload</li>
+            <li>Toggle <code>isPrivate</code> visibility</li>
+            <li>Only provided fields are updated &mdash; omitted fields remain unchanged</li>
+          </ul>
+        </div>
+        <div class="form-grid">
+          <div class="form-group full">
+            <div class="form-label">id <span class="req">*</span></div>
+            <input type="text" class="form-input" id="update-id" placeholder="550e8400-e29b-41d4-a716-446655440000">
+          </div>
+          <div class="form-group">
+            <div class="form-label">alt</div>
+            <input type="text" class="form-input" id="update-alt" placeholder="Alt text">
+          </div>
+          <div class="form-group">
+            <div class="form-label">caption</div>
+            <input type="text" class="form-input" id="update-caption" placeholder="Caption">
+          </div>
+          <div class="form-group full">
+            <div class="form-label">description</div>
+            <input type="text" class="form-input" id="update-description" placeholder="Description">
+          </div>
+          <div class="form-group">
+            <label class="form-check"><input type="checkbox" id="update-isPrivate"> isPrivate</label>
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendUpdateMedia(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-update-media" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="endpoint" data-id="media-variants">
+      <div class="ep-header" onclick="toggle('media-variants')">
+        <span class="method get">GET</span>
+        <span class="ep-path">/api/v1/media/<span class="param">{id}</span>/variants</span>
+        <span class="ep-desc">Get variants for a media file</span>
+        <span class="ep-chevron">&#9654;</span>
+      </div>
+      <div class="ep-body">
+        <div class="ep-info">
+          <strong>When to use:</strong> Fetch all generated variants (thumbnail, small, medium, etc.) for a media file.
+          <ul>
+            <li>Building responsive image sets with <code>&lt;picture&gt;</code> / <code>srcset</code></li>
+            <li>Checking which variants have been generated</li>
+          </ul>
+        </div>
+        <div class="form-grid single">
+          <div class="form-group">
+            <div class="form-label">id <span class="req">*</span></div>
+            <input type="text" class="form-input" id="mediavar-id" placeholder="550e8400-e29b-41d4-a716-446655440000">
+          </div>
+        </div>
+        <div class="ep-actions">
+          <button class="btn-send primary" onclick="sendMediaVariants(this)">
+            <span class="spinner"></span><span class="btn-text">Send Request</span>
+          </button>
+        </div>
+        <div class="response-panel" id="res-media-variants" style="display:none"></div>
       </div>
     </div>
 
@@ -607,6 +811,7 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
       <div class="ep-body">
         <div class="ep-info">
           <strong>When to use:</strong> Permanently delete a file and all of its generated variants from S3.
+          Delete by media ID or by object key. Provide one or the other.
           <ul>
             <li>User deletes a photo or attachment from your application</li>
             <li>Cleanup after content moderation flags inappropriate content</li>
@@ -616,7 +821,11 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
         </div>
         <div class="form-grid">
           <div class="form-group">
-            <div class="form-label">objectKey <span class="req">*</span></div>
+            <div class="form-label">id</div>
+            <input type="text" class="form-input" id="del-id" placeholder="550e8400-e29b-41d4-a716-446655440000">
+          </div>
+          <div class="form-group">
+            <div class="form-label">objectKey</div>
             <input type="text" class="form-input" id="del-objectKey" placeholder="my-org/20240101-120000/photo.jpg">
           </div>
           <div class="form-group">
@@ -918,10 +1127,79 @@ async function sendDownload(btn) {
   setLoading(btn, false);
 }
 
+async function sendGetMedia(btn) {
+  setLoading(btn, true);
+  try {
+    const id = val('getmedia-id');
+    const r = await request('GET', `/api/v1/media/${id}`);
+    renderResponse('res-get-media', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-get-media', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendListMedia(btn) {
+  setLoading(btn, true);
+  try {
+    const params = new URLSearchParams();
+    if (val('list-limit')) params.set('limit', val('list-limit'));
+    if (val('list-offset')) params.set('offset', val('list-offset'));
+    if (val('list-search')) params.set('search', val('list-search'));
+    if (val('list-type')) params.set('type', val('list-type'));
+    if (val('list-sort')) params.set('sort', val('list-sort'));
+    if (val('list-order')) params.set('order', val('list-order'));
+    const r = await request('GET', `/api/v1/media/list?${params}`);
+    renderResponse('res-list-media', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-list-media', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendBatchMedia(btn) {
+  setLoading(btn, true);
+  try {
+    const ids = val('batch-ids').split(',').map(s => s.trim()).filter(Boolean);
+    const r = await request('POST', '/api/v1/media/batch', {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+    renderResponse('res-batch-media', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-batch-media', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendUpdateMedia(btn) {
+  setLoading(btn, true);
+  try {
+    const id = val('update-id');
+    const payload = {};
+    if (val('update-alt')) payload.alt = val('update-alt');
+    if (val('update-caption')) payload.caption = val('update-caption');
+    if (val('update-description')) payload.description = val('update-description');
+    if (checked('update-isPrivate')) payload.isPrivate = true;
+    const r = await request('PATCH', `/api/v1/media/${id}`, {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    renderResponse('res-update-media', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-update-media', e.message); }
+  setLoading(btn, false);
+}
+
+async function sendMediaVariants(btn) {
+  setLoading(btn, true);
+  try {
+    const id = val('mediavar-id');
+    const r = await request('GET', `/api/v1/media/${id}/variants`);
+    renderResponse('res-media-variants', r.status, r.body, r.duration);
+  } catch (e) { renderError('res-media-variants', e.message); }
+  setLoading(btn, false);
+}
+
 async function sendDelete(btn) {
   setLoading(btn, true);
   try {
-    const payload = { objectKey: val('del-objectKey') };
+    const payload = {};
+    if (val('del-id')) payload.id = val('del-id');
+    if (val('del-objectKey')) payload.objectKey = val('del-objectKey');
     if (val('del-bucketName')) payload.bucketName = val('del-bucketName');
     const r = await request('DELETE', '/api/v1/media/', {
       headers: { 'Content-Type': 'application/json' },

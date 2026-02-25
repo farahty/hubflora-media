@@ -10,6 +10,8 @@ npm install @hubflora/media-client
 
 ## Quick Start
 
+### Server-to-server (API key)
+
 ```ts
 import { HubfloraMedia } from "@hubflora/media-client";
 
@@ -25,6 +27,27 @@ const result = await media.upload({
 });
 
 console.log(result.mediaFile?.url);
+```
+
+### Browser (JWT via token provider)
+
+```ts
+import { HubfloraMedia } from "@hubflora/media-client";
+
+const media = new HubfloraMedia({
+  baseUrl: "https://media.hubflora.com",
+  tokenProvider: async () => {
+    const res = await fetch("/api/auth/token");
+    const data = await res.json();
+    return data.token;
+  },
+});
+
+// orgSlug is optional with JWT — derived from the token
+const result = await media.upload({
+  file: myFile,
+  generateVariants: true,
+});
 ```
 
 ## Upload with Progress
@@ -82,6 +105,44 @@ const { results, errors } = await media.uploadMany({
 });
 ```
 
+## Query Media
+
+### Get by ID
+
+```ts
+const { mediaFile } = await media.get("550e8400-e29b-41d4-a716-446655440000");
+console.log(mediaFile.url);
+```
+
+### List with pagination and search
+
+```ts
+const { items, total } = await media.list({
+  limit: 20,
+  offset: 0,
+  search: "sunset",
+  sort: "created_at",
+  order: "desc",
+});
+```
+
+### Batch get multiple IDs
+
+```ts
+const { items } = await media.batchGet(["id-1", "id-2", "id-3"]);
+```
+
+### Update metadata
+
+```ts
+const { mediaFile } = await media.update("550e8400-...", {
+  alt: "Updated alt text",
+  caption: "New caption",
+  description: "A longer description",
+  isPrivate: false,
+});
+```
+
 ## React / Next.js
 
 Import hooks from `@hubflora/media-client/react`. React is an optional peer dependency.
@@ -105,6 +166,35 @@ function App({ children }) {
   );
 }
 ```
+
+### Session-Synced Provider (recommended for multi-org)
+
+Use `HubfloraMediaSessionProvider` when your app supports multiple organizations. It handles JWT token management and refreshes the token when the org changes.
+
+```tsx
+import { HubfloraMediaSessionProvider } from "@hubflora/media-client/react";
+
+function App({ children }) {
+  const org = useCurrentOrg(); // your org context
+
+  return (
+    <HubfloraMediaSessionProvider
+      baseUrl="https://media.hubflora.com"
+      organizationId={org.id}
+      getToken={async () => {
+        await authClient.organization.setActive({ organizationId: org.id });
+        const res = await authClient.$fetch("/token");
+        return res.data.token;
+      }}
+      fallback={<div>Loading...</div>}
+    >
+      {children}
+    </HubfloraMediaSessionProvider>
+  );
+}
+```
+
+All hooks (`useUpload`, `useMultiUpload`, `useHubfloraMedia`) work with both providers.
 
 ### `useUpload` — Single file with progress
 
@@ -233,6 +323,10 @@ function MyComponent() {
 | `download(opts)` | Download file as Blob |
 | `jobStatus(jobId)` | Poll async job status |
 | `waitForJob(jobId, interval?, onProgress?)` | Wait for job completion |
+| `get(id)` | Get a single media file by ID |
+| `list(opts?)` | List media files (paginated, searchable) |
+| `batchGet(ids)` | Get multiple media files by IDs |
+| `update(id, fields)` | Update media metadata (alt, caption, etc.) |
 
 ## Error Handling
 
