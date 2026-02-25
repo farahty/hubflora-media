@@ -13,6 +13,7 @@ import (
 	"github.com/farahty/hubflora-media/internal/model"
 	"github.com/farahty/hubflora-media/internal/processing"
 	"github.com/farahty/hubflora-media/internal/queue"
+	"github.com/farahty/hubflora-media/internal/repository"
 	"github.com/farahty/hubflora-media/internal/storage"
 )
 
@@ -34,7 +35,7 @@ type CropInputRequest struct {
 
 // Crop handles POST /api/v1/media/crop.
 // Crops the image, replaces the original, and optionally regenerates all variants.
-func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, asynqClient *asynq.Client) http.HandlerFunc {
+func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, asynqClient *asynq.Client, mediaRepo *repository.MediaRepository, variantRepo *repository.VariantRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req CropInputRequest
 		if err := decodeJSON(r, &req); err != nil {

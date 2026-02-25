@@ -6,6 +6,7 @@ import (
 
 	"github.com/farahty/hubflora-media/internal/config"
 	"github.com/farahty/hubflora-media/internal/model"
+	"github.com/farahty/hubflora-media/internal/repository"
 	"github.com/farahty/hubflora-media/internal/storage"
 )
 
@@ -17,7 +18,7 @@ type DeleteRequest struct {
 
 // Delete handles DELETE /api/v1/media.
 // Deletes the original file and all variants under the same folder prefix.
-func Delete(cfg *config.Config, s3 *storage.S3Client) http.HandlerFunc {
+func Delete(cfg *config.Config, s3 *storage.S3Client, mediaRepo *repository.MediaRepository, variantRepo *repository.VariantRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req DeleteRequest
 		if err := decodeJSON(r, &req); err != nil {

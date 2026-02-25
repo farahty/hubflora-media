@@ -17,12 +17,13 @@ import (
 	"github.com/farahty/hubflora-media/internal/model"
 	"github.com/farahty/hubflora-media/internal/processing"
 	"github.com/farahty/hubflora-media/internal/queue"
+	"github.com/farahty/hubflora-media/internal/repository"
 	"github.com/farahty/hubflora-media/internal/storage"
 )
 
 // Upload handles POST /api/v1/media/upload.
 // Accepts multipart/form-data with a "file" field and optional form values.
-func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, asynqClient *asynq.Client) http.HandlerFunc {
+func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, asynqClient *asynq.Client, mediaRepo *repository.MediaRepository, variantRepo *repository.VariantRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse multipart form with max upload size
 		if err := r.ParseMultipartForm(cfg.MaxUploadSize); err != nil {
