@@ -178,6 +178,13 @@ func DualAuth(apiKey string, jwksCache *JWKSCache, betterAuthURL string) func(ht
 			// --- attempt API key ---
 			if key := r.Header.Get(apiKeyHeader); key != "" {
 				if subtle.ConstantTimeCompare([]byte(key), []byte(apiKey)) != 1 {
+					// Key doesn't match static API key — try JWT validation
+					// as a fallback (browser SDKs may send JWTs on this header).
+					if ac, err := validateJWT(r.Context(), key, jwksCache, betterAuthURL); err == nil {
+						ctx := WithAuthContext(r.Context(), ac)
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
 					http.Error(w, `{"error":"invalid API key"}`, http.StatusUnauthorized)
 					return
 				}
