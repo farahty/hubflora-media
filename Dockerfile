@@ -19,8 +19,8 @@ RUN CGO_ENABLED=1 go build -o /hubflora-media ./cmd/server
 # Runtime stage
 FROM alpine:3.21
 
-# Install libvips runtime
-RUN apk add --no-cache vips ca-certificates
+# Install libvips runtime + ffmpeg for video processing
+RUN apk add --no-cache vips ca-certificates ffmpeg
 
 WORKDIR /app
 COPY --from=builder /hubflora-media /app/hubflora-media

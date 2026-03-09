@@ -171,10 +171,31 @@ func (p *Processor) GetMetadata(input []byte) (*ImageMetadata, error) {
 	}, nil
 }
 
-// IsImageMimeType checks if the given MIME type is an image that can be processed.
+// IsImageMimeType checks if the given MIME type is a raster image that bimg can process.
 func IsImageMimeType(mimeType string) bool {
 	switch mimeType {
 	case "image/jpeg", "image/png", "image/webp", "image/avif", "image/gif", "image/tiff":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsSvgMimeType checks if the given MIME type is an SVG.
+func IsSvgMimeType(mimeType string) bool {
+	return mimeType == "image/svg+xml"
+}
+
+// IsProcessableImageMimeType returns true for any image type that can generate variants
+// (raster images via bimg, SVGs via libvips/librsvg rasterization).
+func IsProcessableImageMimeType(mimeType string) bool {
+	return IsImageMimeType(mimeType) || IsSvgMimeType(mimeType)
+}
+
+// IsVideoMimeType checks if the given MIME type is a video.
+func IsVideoMimeType(mimeType string) bool {
+	switch mimeType {
+	case "video/mp4", "video/webm", "video/quicktime", "video/x-msvideo":
 		return true
 	default:
 		return false

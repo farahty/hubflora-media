@@ -102,7 +102,7 @@ func VariantRegenerate(cfg *config.Config, asynqClient *asynq.Client) http.Handl
 
 		folderPath := storage.ExtractFolderPath(req.ObjectKey)
 
-		task, err := queue.NewVariantTask("regen", bucket, folderPath, req.ObjectKey)
+		task, err := queue.NewVariantTask("regen", bucket, folderPath, req.ObjectKey, "")
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create task"})
 			return

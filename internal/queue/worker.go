@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/hibiken/asynq"
 
@@ -24,16 +25,18 @@ type VariantPayload struct {
 	BucketName string `json:"bucketName"`
 	FolderPath string `json:"folderPath"`
 	ObjectKey  string `json:"objectKey"`
+	MimeType   string `json:"mimeType"`
 }
 
 // NewVariantTask creates a new asynq task for variant generation.
 // Only stores the S3 reference, not the file bytes.
-func NewVariantTask(mediaID, bucket, folderPath, objectKey string) (*asynq.Task, error) {
+func NewVariantTask(mediaID, bucket, folderPath, objectKey, mimeType string) (*asynq.Task, error) {
 	payload, err := json.Marshal(VariantPayload{
 		MediaID:    mediaID,
 		BucketName: bucket,
 		FolderPath: folderPath,
 		ObjectKey:  objectKey,
+		MimeType:   mimeType,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal variant payload: %w", err)
@@ -69,7 +72,21 @@ func (h *VariantHandler) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("failed to download original file %q: %w", payload.ObjectKey, err)
 	}
 
-	variants := ProcessVariants(ctx, h.s3, h.proc, data, payload.BucketName, payload.FolderPath)
+	// Detect MIME type if not provided (backward compat with old payloads)
+	mimeType := payload.MimeType
+	if mimeType == "" {
+		mimeType = http.DetectContentType(data)
+	}
+
+	var variants []model.MediaVariant
+
+	if processing.IsVideoMimeType(mimeType) {
+		// Video: extract a single thumbnail frame
+		variants = processVideoThumbnail(ctx, h.s3, h.proc, data, payload.BucketName, payload.FolderPath)
+	} else {
+		// Image (raster + SVG): generate all default variants
+		variants = ProcessVariants(ctx, h.s3, h.proc, data, payload.BucketName, payload.FolderPath)
+	}
 
 	// Persist variants to DB
 	if len(variants) > 0 {
@@ -125,4 +142,36 @@ func ProcessVariants(ctx context.Context, s3 *storage.S3Client, proc *processing
 	}
 
 	return variants
+}
+
+// processVideoThumbnail extracts a frame from video data and generates a WebP thumbnail.
+func processVideoThumbnail(ctx context.Context, s3 *storage.S3Client, proc *processing.Processor, videoData []byte, bucket, folderPath string) []model.MediaVariant {
+	frameData, err := processing.ExtractVideoThumbnail(videoData)
+	if err != nil {
+		slog.Warn("async video thumbnail extraction failed", "error", err)
+		return nil
+	}
+
+	thumbVariant := processing.DefaultVariants[0] // "thumbnail"
+	result, err := proc.ProcessImage(frameData, thumbVariant)
+	if err != nil {
+		slog.Warn("async video thumbnail processing failed", "error", err)
+		return nil
+	}
+
+	thumbKey := storage.GenerateVariantKey(folderPath, "thumbnail", "webp")
+	if err := s3.Upload(ctx, bucket, thumbKey, bytes.NewReader(result.Data), int64(len(result.Data)), result.MimeType); err != nil {
+		slog.Warn("async video thumbnail upload failed", "error", err)
+		return nil
+	}
+
+	return []model.MediaVariant{{
+		Name:      "thumbnail",
+		Width:     result.Width,
+		Height:    result.Height,
+		FileSize:  int64(len(result.Data)),
+		ObjectKey: thumbKey,
+		URL:       s3.GetPublicURL(bucket, thumbKey),
+		MimeType:  result.MimeType,
+	}}
 }

@@ -40,6 +40,7 @@ type MediaFile struct {
 	FileSize         int64             `json:"fileSize"`
 	Width            *int              `json:"width,omitempty"`
 	Height           *int              `json:"height,omitempty"`
+	Duration         *int              `json:"duration,omitempty"`
 	BucketName       string            `json:"bucketName"`
 	ObjectKey        string            `json:"objectKey"`
 	URL              string            `json:"url"`
@@ -110,6 +111,7 @@ func (r *MediaFileRecord) ToMediaFile() *MediaFile {
 		FileSize:         r.FileSize,
 		Width:            r.Width,
 		Height:           r.Height,
+		Duration:         r.Duration,
 		BucketName:       r.BucketName,
 		ObjectKey:        r.ObjectKey,
 		URL:              r.URL,

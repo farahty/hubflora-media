@@ -56,6 +56,19 @@ func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, 
 			bucket = cfg.MinioDefaultBucket
 		}
 
+		// Check if file type supports cropping via DB record
+		record, _ := mediaRepo.GetByObjectKey(r.Context(), req.ObjectKey, authCtx.OrganizationID)
+		if record != nil {
+			if processing.IsSvgMimeType(record.MimeType) {
+				writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "crop is not supported for SVG files"})
+				return
+			}
+			if processing.IsVideoMimeType(record.MimeType) {
+				writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "crop is not supported for video files"})
+				return
+			}
+		}
+
 		// Download original
 		original, err := s3.GetBuffer(r.Context(), bucket, req.ObjectKey)
 		if err != nil {
@@ -122,7 +135,7 @@ func Crop(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor, 
 			folderPath := storage.ExtractFolderPath(req.ObjectKey)
 
 			if req.Async && asynqClient != nil {
-				task, err := queue.NewVariantTask(mediaFile.ID, bucket, folderPath, req.ObjectKey)
+				task, err := queue.NewVariantTask(mediaFile.ID, bucket, folderPath, req.ObjectKey, result.MimeType)
 				if err == nil {
 					info, err := asynqClient.Enqueue(task, asynq.MaxRetry(3))
 					if err == nil {

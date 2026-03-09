@@ -74,6 +74,20 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			mimeType = strings.TrimSpace(mimeType[:idx])
 		}
 
+		// SVG detection: http.DetectContentType returns "text/xml" for SVGs
+		if mimeType == "text/xml" || mimeType == "application/xml" {
+			extLower := strings.ToLower(filepath.Ext(header.Filename))
+			if extLower == ".svg" {
+				mimeType = "image/svg+xml"
+			} else {
+				// Check file content for <svg tag
+				snippet := string(data[:min(len(data), 1024)])
+				if strings.Contains(strings.ToLower(snippet), "<svg") {
+					mimeType = "image/svg+xml"
+				}
+			}
+		}
+
 		// Validate file type
 		if !processing.IsAllowedMimeType(mimeType) {
 			writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: fmt.Sprintf("file type %q is not allowed", mimeType)})
@@ -129,8 +143,8 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			record.Description = &description
 		}
 
-		// Extract image metadata
-		if processing.IsImageMimeType(mimeType) {
+		// Extract image metadata (raster images + SVGs via libvips)
+		if processing.IsProcessableImageMimeType(mimeType) {
 			meta, err := proc.GetMetadata(data)
 			if err == nil {
 				imgW := meta.Width
@@ -146,6 +160,22 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			}
 		}
 
+		// Extract video metadata (dimensions, duration, codec via ffprobe)
+		if processing.IsVideoMimeType(mimeType) {
+			meta, err := processing.ExtractVideoMetadata(data)
+			if err == nil {
+				record.Width = &meta.Width
+				record.Height = &meta.Height
+				record.Duration = &meta.Duration
+				record.Metadata = map[string]any{
+					"codec":  meta.Codec,
+					"format": meta.Format,
+				}
+			} else {
+				slog.Warn("video metadata extraction failed", "error", err)
+			}
+		}
+
 		// Persist to DB
 		if err := mediaRepo.Create(r.Context(), record); err != nil {
 			slog.Error("failed to insert media_files record", "error", err)
@@ -153,10 +183,10 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 			return
 		}
 
-		// Generate variants
-		if generateVariants && processing.IsImageMimeType(mimeType) {
+		// Generate variants (raster images + SVGs)
+		if generateVariants && processing.IsProcessableImageMimeType(mimeType) {
 			if async && asynqClient != nil {
-				task, err := queue.NewVariantTask(record.ID, bucket, folderPath, objectKey)
+				task, err := queue.NewVariantTask(record.ID, bucket, folderPath, objectKey, mimeType)
 				if err == nil {
 					info, err := asynqClient.Enqueue(task, asynq.MaxRetry(3), asynq.Timeout(5*time.Minute))
 					if err != nil {
@@ -190,6 +220,47 @@ func Upload(cfg *config.Config, s3 *storage.S3Client, proc *processing.Processor
 					}
 				}
 				record.Variants = variantRecords
+			}
+		}
+
+		// Generate video thumbnail (extract frame → resize → upload as WebP)
+		if generateVariants && processing.IsVideoMimeType(mimeType) {
+			frameData, err := processing.ExtractVideoThumbnail(data)
+			if err != nil {
+				slog.Warn("video thumbnail extraction failed", "error", err)
+			} else {
+				thumbVariant := processing.DefaultVariants[0] // "thumbnail"
+				result, err := proc.ProcessImage(frameData, thumbVariant)
+				if err != nil {
+					slog.Warn("video thumbnail processing failed", "error", err)
+				} else {
+					thumbKey := storage.GenerateVariantKey(folderPath, "thumbnail", "webp")
+					if err := s3.Upload(r.Context(), bucket, thumbKey, bytes.NewReader(result.Data),
+						int64(len(result.Data)), result.MimeType); err != nil {
+						slog.Warn("video thumbnail upload failed", "error", err)
+					} else {
+						thumbURL := s3.GetPublicURL(bucket, thumbKey)
+						record.ThumbnailURL = &thumbURL
+
+						variant := model.MediaVariant{
+							Name:      "thumbnail",
+							Width:     result.Width,
+							Height:    result.Height,
+							FileSize:  int64(len(result.Data)),
+							ObjectKey: thumbKey,
+							URL:       thumbURL,
+							MimeType:  result.MimeType,
+						}
+						variantRecords := repository.ToRecords(record.ID, []model.MediaVariant{variant})
+						if err := variantRepo.CreateBatch(r.Context(), variantRecords); err != nil {
+							slog.Warn("failed to persist video thumbnail record", "error", err)
+						}
+						record.Variants = variantRecords
+
+						mediaRepo.Update(r.Context(), record.ID, authCtx.OrganizationID,
+							repository.UpdateFields{ThumbnailURL: &thumbURL})
+					}
+				}
 			}
 		}
 

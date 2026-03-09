@@ -168,6 +168,10 @@ func FileExtensionFromMimeType(mimeType string) string {
 		return "mp4"
 	case "video/webm":
 		return "webm"
+	case "video/quicktime":
+		return "mov"
+	case "video/x-msvideo":
+		return "avi"
 	case "audio/mpeg":
 		return "mp3"
 	case "audio/wav":

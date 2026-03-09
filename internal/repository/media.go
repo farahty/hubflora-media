@@ -163,6 +163,7 @@ type UpdateFields struct {
 	Height       *int
 	FileSize     *int64
 	MimeType     *string
+	Duration     *int
 }
 
 // Update partially updates a media file by ID, scoped to organization.
@@ -203,6 +204,9 @@ func (r *MediaRepository) Update(ctx context.Context, id string, orgID string, f
 	}
 	if fields.MimeType != nil {
 		addField("mime_type", *fields.MimeType)
+	}
+	if fields.Duration != nil {
+		addField("duration", *fields.Duration)
 	}
 
 	if len(sets) == 0 {
